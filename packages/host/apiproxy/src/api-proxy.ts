@@ -2867,12 +2867,16 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async deleteSession(request) {
         const { sessionId } = request.payload
-        if (ctx.sessions.get(sessionId) !== undefined) {
-          return err(request, {
-            code: 'session-live',
-            message: `cannot delete live session "${sessionId}": stop it before deleting`,
-            details: { sessionId },
-          })
+        const liveSession = ctx.sessions.get(sessionId)
+        if (liveSession !== undefined) {
+          const agent = ctx.agents.get(sessionId)
+          if (agent !== undefined) {
+            agent.cancel({ kind: 'disposed' })
+            await agent.whenIdle()
+          }
+          await ctx.sessions.flush(liveSession)
+          ctx.agents.remove(sessionId)
+          ctx.sessions.remove(sessionId)
         }
         const persistence = ctx.get('sessionPersistence')
         if (persistence === undefined) {

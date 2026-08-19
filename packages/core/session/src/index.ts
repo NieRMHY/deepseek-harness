@@ -946,6 +946,24 @@ export class SessionStore extends Service {
     return detach
   }
 
+  /**
+   * Remove one live session from the store by id, following the same
+   * publication-deferral rule as the enter() detach capability. The caller
+   * owns flushing and stopping the session's agent first.
+   * @param sessionId - the live session to remove.
+   * @returns `true` when a live entry existed, `false` when the id was absent.
+   */
+  remove(sessionId: SessionId): boolean {
+    const entry = this.store.get(sessionId)
+    if (entry === undefined) return false
+    if (entry.announcing || entry.appending) {
+      entry.detachRequested = true
+      return true
+    }
+    entry.detach()
+    return true
+  }
+
   /** Remove one exact entered session and emit its paired disposal when announced. */
   private detachEntered(entry: SessionEntry): void {
     entry.detachRequested = false

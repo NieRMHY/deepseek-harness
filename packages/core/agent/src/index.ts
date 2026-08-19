@@ -508,6 +508,24 @@ export class AgentRegistry extends Service {
     return detach
   }
 
+  /**
+   * Remove one live agent from the registry by id, following the same
+   * announcement-deferral rule as {@link enter}. Session deletion is the
+   * only caller; it owns stopping and flushing the agent's session first.
+   * @param sessionId - the agent id (shared with its session) to remove.
+   * @returns `true` when a live entry existed, `false` when the id was absent.
+   */
+  remove(sessionId: SessionId): boolean {
+    const entry = this.store.get(sessionId)
+    if (entry === undefined) return false
+    if (entry.announcing) {
+      entry.detachRequested = true
+      return true
+    }
+    this.detachEntered(entry)
+    return true
+  }
+
   /** Remove one exact entered agent and emit its paired disposal when announced. */
   private detachEntered(entry: AgentEntry): void {
     entry.detachRequested = false

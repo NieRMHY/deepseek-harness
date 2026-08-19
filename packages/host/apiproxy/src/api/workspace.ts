@@ -118,9 +118,9 @@ export interface WorkspaceApi {
   /**
    * Permanently deletes one session: its persisted log and projection-cache
    * checkpoint, its workspace accounting slots, and its archive-set entry.
-   * A live session (one still loaded in the store) fails with
-   * `session-live`; stop it before deleting. The operation is idempotent for
-   * a session that no longer exists. Returns the full updated archive set.
+   * A live session is cancelled, flushed, and detached first. The operation
+   * is idempotent for a session that no longer exists. Returns the full
+   * updated archive set.
    */
   deleteSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ deleted: true; archivedSessionIds: SessionId[] }>>

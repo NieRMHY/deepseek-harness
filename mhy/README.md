@@ -52,7 +52,7 @@ cp -a mhy/preset/. "$DSH_HOME/.agent-presets/niermhy-standard/"
 
 - 侧边栏会话列表新增「已归档」分组，归档会话可点开查看历史；
 - 归档会话行菜单提供「取消归档」和「删除会话」；
-- 新增 RPC：`workspace.unarchiveSession`、`workspace.deleteSession`，删除会清理会话日志、工作区记账、归档集合和投影缓存；
+- 新增 RPC：`workspace.unarchiveSession`、`workspace.deleteSession`，删除会清理会话日志、工作区记账、归档集合和投影缓存；live 会话会先停止并 flush 再删除；
 - 打开归档会话不会再被旧的「当前选择在归档集合就清空」逻辑弹回新对话界面。
 
 涉及包：`dsh-workspace`、`dsh-session-persistence`（JSONL / SQLite）、`dsh-session-projection-cache`、`dsh-host-apiproxy`、`dsh-client-runtime`、`dsh-client-ui-workspace`，相应单元/组件测试已同步更新。

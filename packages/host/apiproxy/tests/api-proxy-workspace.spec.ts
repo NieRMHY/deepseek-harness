@@ -75,7 +75,10 @@ async function harness(
   const storageDomain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
-  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  ctx.provide('sessionPersistence', {
+    list: () => Promise.resolve([]),
+    delete: async () => false,
+  } as never)
   await ctx.plugin(WorkspaceRegistry)
 
   const factory: AgentFactory = {
@@ -566,5 +569,21 @@ describe('Host Workspace increments', () => {
       error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
     })
     abort.abort()
+  })
+
+  it('deletes a live session after cancelling and detaching it', async () => {
+    const { api, ctx, root } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'delete-live') }))).workspace
+    const sessionId = SessionId('session-delete-live')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId })))
+    expect(ctx.sessions.get(sessionId)).toBeDefined()
+    expect(ctx.agents.get(sessionId)).toBeDefined()
+
+    const deleted = expectOk(await api.workspace.deleteSession(request({ sessionId })))
+    expect(deleted).toEqual({ deleted: true, archivedSessionIds: [] })
+    expect(ctx.sessions.get(sessionId)).toBeUndefined()
+    expect(ctx.agents.get(sessionId)).toBeUndefined()
+    expect(expectOk(await api.sessions.list(request({}))).items.map(item => item.sessionId)).not.toContain(sessionId)
+    expect(expectOk(await api.workspace.list(request({}))).items[0]?.sessionIds).not.toContain(sessionId)
   })
 })
