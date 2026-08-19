@@ -106,4 +106,22 @@ export interface WorkspaceApi {
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Removes one session from the registry-global archive set so grouping
+   * surfaces show it again in its accounting slot. Idempotent for an id that
+   * is not archived. Returns the full updated archive set.
+   */
+  unarchiveSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Permanently deletes one session: its persisted log and projection-cache
+   * checkpoint, its workspace accounting slots, and its archive-set entry.
+   * A live session (one still loaded in the store) fails with
+   * `session-live`; stop it before deleting. The operation is idempotent for
+   * a session that no longer exists. Returns the full updated archive set.
+   */
+  deleteSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ deleted: true; archivedSessionIds: SessionId[] }>>
 }

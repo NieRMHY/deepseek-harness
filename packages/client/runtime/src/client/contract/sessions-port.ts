@@ -44,4 +44,9 @@ export interface SessionsPort {
   open(id: SessionId): void
   /** Clear the current selection into the no-session view state. */
   clear(): void
+  /**
+   * Drop one session row from the list store after a durable deletion.
+   * @param id - the deleted session.
+   */
+  forget(id: SessionId): void
 }

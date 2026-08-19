@@ -280,6 +280,17 @@ export class SessionProjectionCache extends Service {
     }
   }
 
+  /**
+   * Drop one session's persisted checkpoint. Deletion is the only caller;
+   * identity validation does not apply because there is no surviving log to
+   * match against.
+   * @param id - the deleted session whose checkpoint is obsolete.
+   * @returns resolution after durability.
+   */
+  async forget(id: SessionId): Promise<void> {
+    await this.requireTable().delete(id)
+  }
+
   private requireTable(): KvTable<SessionId, CheckpointRecord> {
     /* v8 ignore next -- Service.init assigns the table before the service becomes injectable */
     if (this.table === undefined) throw new Error('session projection cache is not initialized')

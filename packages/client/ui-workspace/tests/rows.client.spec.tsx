@@ -373,6 +373,28 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  it('archived session row offers unarchive and the danger delete row', () => {
+    const onUnarchive = vi.fn()
+    const onDelete = vi.fn()
+    const node: SessionNode = {
+      id: sid('s-archived'), title: 'Old', blank: false, archived: true, running: false,
+      runningSubagentCount: 0, completed: false, updatedAt: 0,
+    }
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()}
+      onUnarchive={onUnarchive} onDelete={onDelete} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: '会话“Old”的操作' }))
+    // Archived rows have no rename/fork/archive verbs; deletion is destructive.
+    expect(screen.queryByRole('menuitem', { name: '重命名' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '归档会话' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '删除会话' }).className).toMatch(/danger/)
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消归档' }))
+    expect(onUnarchive).toHaveBeenCalledWith(node.id)
+    fireEvent.click(screen.getByRole('button', { name: '会话“Old”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除会话' }))
+    expect(onDelete).toHaveBeenCalledWith(node.id, 'Old')
+  })
+
 
   it('shows the hover card after the dwell and suppresses it while the row menu is open', () => {
     vi.useFakeTimers()

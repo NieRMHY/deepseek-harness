@@ -9,7 +9,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { readdirSync } from 'node:fs'
-import { open, mkdir, readFile, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readFile, readdir, realpath, link, rm, rmdir, stat, truncate } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -112,6 +112,12 @@ function isENOENT(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
 }
 
+/** Whether rmdir failed because the directory still has entries. */
+function isNotEmptyError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'ENOTEMPTY' || code === 'EEXIST'
+}
+
 /**
  * The JSONL persistence backend. Load as a plugin; it registers as
  * `ctx.sessionPersistence` and (via the coordinator) installs the write-path
@@ -171,6 +177,34 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   /** Resolve the absolute target path without touching the filesystem. */
   locate(meta: SessionHeader): SessionLocation {
     return { kind: 'jsonl', path: logPath(this.root, meta.cwd, meta.id, this.compression) }
+  }
+
+  /**
+   * Delete one materialized transcript and, when it leaves the session
+   * directory empty, that directory too. Attachments and other session-owned
+   * artifacts keep the directory, so this never deletes files it did not
+   * write.
+   * @param id - the persisted session to delete.
+   * @param signal - optional cancellation.
+   * @returns `true` when the transcript existed and was deleted.
+   */
+  override async delete(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    const path = await this.findLog(id, signal)
+    if (path === undefined) return false
+    signal?.throwIfAborted()
+    await rm(path)
+    const dir = dirname(path)
+    try {
+      await rmdir(dir)
+    } catch (error: unknown) {
+      // A non-empty directory means other session-owned artifacts remain;
+      // keep them and the directory. A vanished directory is the same outcome.
+      if (!isENOENT(error) && !isNotEmptyError(error)) throw error
+    }
+    return true
   }
 
   create(meta: SessionHeader): Promise<void> {

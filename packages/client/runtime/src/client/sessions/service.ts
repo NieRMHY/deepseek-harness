@@ -424,6 +424,14 @@ export class SessionRuntime implements ISessions {
   }
 
   /**
+   * Drop one session row from the list mirror after a durable deletion.
+   * @param id - the deleted session.
+   */
+  forget(id: SessionId): void {
+    this.manager.forgetSession(id)
+  }
+
+  /**
    * Refresh the real Session baseline, reusing an in-flight pull.
    * @returns completion of the current or newly started baseline pull.
    */

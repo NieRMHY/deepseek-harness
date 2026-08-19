@@ -10,6 +10,14 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
 
+## NieRMHY fork 特色
+
+这个 fork 在 `0.1.0-rc.7` 之上加入三组特色修改，详见 [`mhy/README.md`](mhy/README.md)：
+
+- 归档会话重新可见，支持取消归档和彻底删除。
+- OpenAI 兼容中转支持 DeepSeek 思考强度（`low`/`high`/`max`），并透传显式的 `supportsDeveloperRole`。
+- NieRMHY-Standard 预设：任务感知路由 + AGENTS.md/CLAUDE.md 项目根加载。
+
 ## 运行
 
 ### 通过 `npm` 运行

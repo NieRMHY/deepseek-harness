@@ -1,0 +1,3 @@
+name: NieRMHY-Standard
+description: 任务感知路由标准预设（基于 dsh-routing-suite router-standard）：首请求用最小工具面锚定，随后放开完整 Standard 工具；自动加载 AGENTS.md/CLAUDE.md，支持 workspace 与 Obsidian vault 项目根。
+order: 2

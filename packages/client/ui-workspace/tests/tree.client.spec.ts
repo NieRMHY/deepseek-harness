@@ -4,7 +4,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
-  UNGROUPED_KEY, UNGROUPED_LABEL,
+  ARCHIVED_KEY, UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -179,19 +179,23 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessions.map(node => node.id)).toEqual([sid('present')])
   })
 
-  it('hides archived sessions from workspace groups and Ungrouped', () => {
+  it('collects archived sessions into a trailing archive group', () => {
     const kept = summary('kept', 1, '/projects/first')
     const gone = summary('gone', 2, '/projects/first')
     const looseGone = summary('loose-gone', 3, '/other')
     const sessions = list(kept, gone, looseGone)
     const groups = deriveGroups(
-      sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'), view(['first', UNGROUPED_KEY]),
+      sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'),
+      view(['first', UNGROUPED_KEY, ARCHIVED_KEY]),
     )
-    // The archived member drops from its group AND the archived stray never
-    // surfaces an Ungrouped bucket; counts follow the visible rows.
-    expect(groups.map(group => group.key)).toEqual(['first'])
+    // The archived member drops from its group; every archived session —
+    // accounted or stray — lands in the trailing archive group.
+    expect(groups.map(group => group.key)).toEqual(['first', ARCHIVED_KEY])
     expect(groups[0]!.sessions.map(node => node.id)).toEqual([kept.id])
     expect(groups[0]!.sessionCount).toBe(1)
+    expect(groups[1]!.sessionCount).toBe(2)
+    expect(groups[1]!.sessions.map(node => node.id)).toEqual([looseGone.id, gone.id])
+    expect(groups[1]!.sessions.map(node => node.archived)).toEqual([true, true])
   })
 
   it('marks selected Workspace and Ungrouped sessions without relying on an Intent', () => {
@@ -244,10 +248,12 @@ describe('deriveFlat', () => {
     expect(rows.map(row => row.blank)).toEqual([true, false])
   })
 
-  it('hides archived sessions in flat mode', () => {
+  it('keeps archived sessions in flat mode and marks them', () => {
     const kept = summary('kept', 1)
     const gone = summary('gone', 2)
-    expect(deriveFlat(list(kept, gone), archived('gone')).map(row => row.id)).toEqual([kept.id])
+    const rows = deriveFlat(list(kept, gone), archived('gone'))
+    expect(rows.map(row => row.id)).toEqual([gone.id, kept.id])
+    expect(rows.map(row => row.archived)).toEqual([true, false])
   })
 })
 

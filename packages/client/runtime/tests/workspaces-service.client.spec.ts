@@ -488,7 +488,7 @@ describe('WorkspaceRuntime', () => {
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
   })
 
-  it('clears a current archived by a remote frame and shields the set from a stale in-flight baseline', async () => {
+  it('keeps a current archived by a remote frame and shields the set from a stale in-flight baseline', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
     const sessions = new SessionRuntime(ctx, api, fakeRemote())
@@ -500,8 +500,9 @@ describe('WorkspaceRuntime', () => {
     sessions.open(sid('s-open'))
 
     // A stale baseline is in flight (older, empty set) when another tab's
-    // archive frame lands: the frame clears the current selection and its
-    // set survives the baseline's later resolution.
+    // archive frame lands: the frame keeps the explicit selection (archived
+    // sessions are openable) and its set survives the baseline's later
+    // resolution.
     const gate = deferred<Awaited<ReturnType<FakeApiClient['onWorkspaceList']>>>()
     api.onWorkspaceList = () => gate.promise
     const hydration = workspaces.refresh()
@@ -510,7 +511,7 @@ describe('WorkspaceRuntime', () => {
       payload: { type: 'host/archived-sessions-changed', archivedSessionIds: [sid('s-open')] },
     } as never)
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(sessions.list.getSnapshot().current).toBeUndefined()
+    expect(sessions.list.getSnapshot().current).toBe(sid('s-open'))
     gate.resolve(ok({ items: [], archivedSessionIds: [] }))
     await hydration
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-open'])
@@ -518,6 +519,22 @@ describe('WorkspaceRuntime', () => {
     api.onWorkspaceList = () => Promise.resolve(ok({ items: [], archivedSessionIds: [] }) as never)
     await workspaces.refresh()
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
+  })
+
+  it('lets the user open a session that is already archived without clearing the selection', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onList = () => Promise.resolve(ok({
+      items: [{ sessionId: sid('s-old'), updatedAt: 1, running: false, blank: false }],
+    }) as never)
+    await sessions.refresh()
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [], archivedSessionIds: [sid('s-old')] }) as never)
+    await workspaces.refresh()
+    sessions.open(sid('s-old'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(sessions.list.getSnapshot().current).toBe(sid('s-old'))
   })
 })
 

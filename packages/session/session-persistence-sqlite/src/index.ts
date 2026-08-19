@@ -174,6 +174,30 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     return undefined
   }
 
+  /**
+   * Delete one materialized session's header and event rows in one
+   * transaction.
+   * @param id - the persisted session to delete.
+   * @param signal - optional cancellation.
+   * @returns `true` when the session row existed and was deleted.
+   */
+  override async delete(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted()
+    await this.ready
+    signal?.throwIfAborted()
+    if (this.rowFor(id) === undefined) return false
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      this.db.exec('COMMIT')
+    } catch (error: unknown) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    return true
+  }
+
   create(meta: SessionHeader): Promise<void> {
     return this.coordinator.create(meta)
   }

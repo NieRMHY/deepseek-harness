@@ -122,11 +122,18 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
    */
   insertWorkspaceBefore: (workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId) => Promise<void>
   /**
-   * Archive a Session into the registry-global set: hidden from grouping
-   * surfaces, log and accounting slot retained. Archiving the current
-   * session clears the selection into the New Session view state.
+   * Archive a Session into the registry-global set: hidden from ordinary
+   * grouping surfaces, log and accounting slot retained. Archiving the
+   * current session clears the selection into the New Session view state.
    */
   archiveSession: (sessionId: SessionId) => Promise<void>
+  /** Restore an archived Session to its workspace account. */
+  unarchiveSession: (sessionId: SessionId) => Promise<void>
+  /**
+   * Permanently delete a Session: durable log, workspace account, archive
+   * entry, and projection cache. The Host rejects live sessions.
+   */
+  deleteSession: (sessionId: SessionId) => Promise<void>
   /**
    * Reorder a session inside its Workspace account (DOM-insertBefore
    * semantics: omitted anchor appends to the end). The view refreshes from

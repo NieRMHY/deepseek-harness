@@ -185,7 +185,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork'
+      | 'clear' | 'search' | 'fork' | 'forget'
     args: unknown[]
   }[] = []
 
@@ -454,6 +454,20 @@ export class TestSessions implements ISessions {
     this.list.update((draft) => {
       draft.current = undefined
       draft.currentAddress = undefined
+    })
+  }
+
+  /** Drop one session row and its retained records after a durable deletion. */
+  forget(id: SessionId): void {
+    this.calls.push({ method: 'forget', args: [id] })
+    this.records.delete(id)
+    this.list.update((draft) => {
+      const ids = draft.ids.filter(sessionId => sessionId !== id)
+      if (ids.length === draft.ids.length) return
+      draft.ids = ids
+      if (draft.current === id) draft.current = undefined
+      const { [id]: _removed, ...remaining } = draft.byId
+      draft.byId = remaining
     })
   }
 

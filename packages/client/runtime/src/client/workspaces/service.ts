@@ -282,14 +282,37 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
-   * Archive a session into the registry-global set. Clearing an archived
-   * current selection is the projection sweep's job (one rule for the local
-   * echo and a remote tab's frame alike).
+   * Archive a session into the registry-global set. Archiving the selected
+   * session clears the selection into the New Session view state; archived
+   * sessions selected later stay open.
    * @param sessionId - session to archive.
    */
   async archiveSession(sessionId: SessionId): Promise<void> {
     const result = await this.manager.archiveSession(sessionId)
     if (!result.ok) throw new Error(`session archive failed: ${result.error.code}: ${result.error.message}`)
+    // Archiving the selected session clears it into the New Session view
+    // state. Archived sessions are openable now, so a frame echo must not
+    // sweep an explicit user selection; only the local gesture clears.
+    if (this.sessions.list.getSnapshot().current === sessionId) this.sessions.clear()
+  }
+
+  /**
+   * Restore an archived session to its workspace account.
+   * @param sessionId - session to unarchive.
+   */
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.unarchiveSession(sessionId)
+    if (!result.ok) throw new Error(`session unarchive failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
+   * Permanently delete a session and drop its row from the sessions domain.
+   * @param sessionId - session to delete.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.deleteSession(sessionId)
+    if (!result.ok) throw new Error(`session delete failed: ${result.error.code}: ${result.error.message}`)
+    this.sessions.forget(sessionId)
   }
 
   /**
@@ -334,14 +357,6 @@ export class WorkspaceRuntime implements IWorkspaces {
     const workspace = this.manager.getSnapshot()
     const sessions = this.sessions.list.getSnapshot()
     const baselinesReady = workspace.phase === 'ready' && sessions.phase === 'ready'
-    // An archived current selection clears into the New Session view state —
-    // a hidden row must not stay open behind the list. Sweeping here covers
-    // every install path with one rule: the local unary echo, another tab's
-    // changed frame, and a reconnect baseline restoring a persisted
-    // selection that was archived while this client was away.
-    if (sessions.current !== undefined && workspace.archivedSessionIds.includes(sessions.current)) {
-      this.sessions.clear()
-    }
     this.list.set({
       items: workspace.items,
       archivedSessionIds: workspace.archivedSessionIds,

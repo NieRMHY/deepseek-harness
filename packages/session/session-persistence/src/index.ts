@@ -200,6 +200,24 @@ export abstract class SessionPersistence extends Service {
   abstract inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection>
 
   /**
+   * Durably delete one persisted session and every backend-owned artifact it
+   * materialized. Backends without a deletion primitive keep the default
+   * rejection so callers can distinguish unsupported storage from an absent
+   * session.
+   * @param _id - the persisted session to delete (unused by the default).
+   * @param signal - optional cancellation for backend delete work.
+   * @returns `true` when a materialized session existed and was deleted,
+   *   `false` when no such session was materialized.
+   * @throws when this backend does not support session deletion.
+   */
+  delete(_id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'))
+    }
+    return Promise.reject(new Error('this session persistence backend does not support session deletion'))
+  }
+
+  /**
    * Read the stored events from `fromSeq` onward — the read-from-seq
    * primitive for read models that resume from a watermark (e.g. a persisted
    * projection cache folding only the tail past its checkpoint). Unlike

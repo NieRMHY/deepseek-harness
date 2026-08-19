@@ -2858,6 +2858,34 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
       },
+
+      async unarchiveSession(request) {
+        const { sessionId } = request.payload
+        await ctx.workspaceRegistry.unarchiveSession(sessionId)
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async deleteSession(request) {
+        const { sessionId } = request.payload
+        if (ctx.sessions.get(sessionId) !== undefined) {
+          return err(request, {
+            code: 'session-live',
+            message: `cannot delete live session "${sessionId}": stop it before deleting`,
+            details: { sessionId },
+          })
+        }
+        const persistence = ctx.get('sessionPersistence')
+        if (persistence === undefined) {
+          throw new Error('session deletion is unavailable: no session persistence service is composed')
+        }
+        await persistence.delete(sessionId)
+        await ctx.workspaceRegistry.forgetSession(sessionId)
+        await ctx.get('sessionProjectionCache')?.forget(sessionId)
+        return ok(request, {
+          deleted: true as const,
+          archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds],
+        })
+      },
     },
 
     host: {
