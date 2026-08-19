@@ -6,10 +6,6 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
-## 开发者预览
-
-DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
-
 ## NieRMHY fork 特色
 
 这个 fork 在 `0.1.0-rc.7` 之上加入三组特色修改，详见 [`mhy/README.md`](mhy/README.md)：
@@ -17,6 +13,10 @@ DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**
 - 归档会话重新可见，支持取消归档和彻底删除。
 - OpenAI 兼容中转支持 DeepSeek 思考强度（`low`/`high`/`max`），并透传显式的 `supportsDeveloperRole`。
 - NieRMHY-Standard 预设：任务感知路由 + AGENTS.md/CLAUDE.md 项目根加载。
+
+## 开发者预览
+
+DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
 
 ## 运行
 

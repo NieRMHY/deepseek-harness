@@ -6,10 +6,6 @@ DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek 
 
 It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
 
-## Developer preview
-
-DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
-
 ## NieRMHY fork additions
 
 This fork adds three opinionated changes on top of `0.1.0-rc.7`; see [`mhy/README.md`](mhy/README.md) for details:
@@ -17,6 +13,10 @@ This fork adds three opinionated changes on top of `0.1.0-rc.7`; see [`mhy/READM
 - Archived sessions are visible again with unarchive and permanent delete.
 - OpenAI-compatible gateways expose DeepSeek reasoning effort (`low`/`high`/`max`) and an explicit `supportsDeveloperRole` passthrough.
 - The NieRMHY-Standard preset with task-aware routing and AGENTS.md/CLAUDE.md project roots.
+
+## Developer preview
+
+DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
 
 ## Run
 
