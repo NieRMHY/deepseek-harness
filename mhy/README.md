@@ -1,8 +1,12 @@
 # NieRMHY fork 特色修改
 
-这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 相对上游 `0.1.0-rc.7` 的三组特色修改。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
+这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 在官方 `0.1.0-rc.8` 之上的三组特色修改。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
 
 ## 1. 自定义 OpenAI 兼容中转支持 DeepSeek 思考强度
+
+rc8 起官方已经原生支持：`dsh-llm-pi-ai` 把 `supportsDeveloperRole`、`reasoningEfforts` 以及大量 compat 开关加进了 config schema 和 catalog。因此**本 fork 不再需要给 `dsh-llm-pi-ai` 打补丁**，只需要按 [`mhy/settings.example.yaml`](settings.example.yaml) 配置网关即可。
+
+下面保留 rc7 时代的问题说明，帮助理解配置含义：
 
 问题：用公司网关 / New API 之类第三方中转连 DeepSeek 时，模型选择器没有思考强度选项；开启思考后还可能收到：
 
@@ -15,15 +19,15 @@ unknown variant `developer`, expected one of `system`, `user`, `assistant`, ...
 - `dsh-llm-pi-ai` 的 `compatProfile` schema 白名单没有 `supportsDeveloperRole`，配置会被解析层丢掉；
 - 没显式关闭时，第三方中转请求的 system prompt 会被序列化成 `developer` role，DeepSeek 官方 OpenAI 接口拒绝。
 
-修复：
+修复（仅 ≤rc.7 需要）：
 
-- [`mhy/patch-dsh.sh`](patch-dsh.sh)：幂等补丁 `dsh-llm-pi-ai`，把 `supportsDeveloperRole` 加进 schema 和路由透传，升级 DSH 后重跑即可；
+- [`mhy/patch-dsh.sh`](patch-dsh.sh)：幂等补丁 `dsh-llm-pi-ai`，把 `supportsDeveloperRole` 加进 schema 和路由透传，rc7 升级后重跑即可；rc8 起不要运行，上游 schema 已包含该字段。
 - [`mhy/settings.example.yaml`](settings.example.yaml)：中转 provider 完整示例，DeepSeek v4 思考强度三档 `low / high / max`（DeepSeek 官方目前只支持这三档，`medium` 会映射成 `high`），GLM 模型不配 `reasoningEfforts`。
 
-用法：
+rc8 用法：
 
 ```bash
-bash mhy/patch-dsh.sh --restart
+# 只改 settings.yaml 即可，无需 patch-dsh.sh
 # 按 settings.example.yaml 修改 DSH settings.yaml 后重启
 ```
 
