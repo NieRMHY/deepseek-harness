@@ -260,6 +260,30 @@ export class SqliteStore implements PersistenceBackend<number> {
     }))
   }
 
+  /**
+   * Delete one materialized session's metadata and event rows in one
+   * transaction. The session may have been cold or already removed; only a
+   * present metadata row makes the return true.
+   * @param id - the session to delete.
+   * @param signal - optional cancellation before or after the query.
+   * @returns `true` when a session row existed and was deleted.
+   */
+  async deleteSession(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    await this.observe(signal)
+    this.db.exec(sql('begin'))
+    try {
+      const existed = this.rowFor(id) !== undefined
+      if (existed) {
+        this.db.prepare(sql('delete-events-from')).run(id, 0)
+        this.db.prepare(sql('delete-session')).run(id)
+      }
+      this.db.exec(sql('commit'))
+      return existed
+    } catch (error: unknown) {
+      this.rollback(error, 'delete')
+    }
+  }
+
   async close(): Promise<void> {
     if (this.ready === undefined) {
       if (this.pathReady !== undefined) await Promise.allSettled([this.pathReady])
