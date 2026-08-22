@@ -99,7 +99,7 @@ export interface IWorkspaces {
   unarchiveSession(sessionId: SessionId): Promise<void>
   /**
    * Permanently delete a session: log, workspace account, archive entry, and
-   * projection cache. The host rejects live sessions.
+   * projection cache. A live session is cancelled, flushed, and detached first.
    * @param sessionId - session to delete.
    */
   deleteSession(sessionId: SessionId): Promise<void>

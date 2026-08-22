@@ -1,6 +1,6 @@
 # NieRMHY fork 特色修改
 
-这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 在官方 `0.1.0-rc.8` 之上的三组特色修改。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
+这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 在官方 `0.1.1-rc.2` 之上的三组特色修改。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
 
 ## 1. 自定义 OpenAI 兼容中转支持 DeepSeek 思考强度
 
@@ -52,7 +52,7 @@ cp -a mhy/preset/. "$DSH_HOME/.agent-presets/niermhy-standard/"
 
 ## 3. 归档会话可见、取消归档与彻底删除
 
-上游 `0.1.0-rc.7` 归档会话后没有任何入口再看到它，也没有删除会话的 API。本 fork 补齐：
+上游（含 `0.1.1-rc.2`）归档会话后没有任何入口再看到它，也没有删除会话的 API。本 fork 补齐：
 
 - 侧边栏会话列表新增「已归档」分组，归档会话可点开查看历史；
 - 归档会话行菜单提供「取消归档」和「删除会话」；

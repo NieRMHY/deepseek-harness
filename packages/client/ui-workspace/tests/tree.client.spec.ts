@@ -248,12 +248,14 @@ describe('deriveFlat', () => {
     expect(rows.map(row => row.blank)).toEqual([true, false])
   })
 
-  it('keeps archived sessions in flat mode and marks them', () => {
+  it('leaves archived sessions out of flat mode', () => {
     const kept = summary('kept', 1)
     const gone = summary('gone', 2)
     const rows = deriveFlat(list(kept, gone), archived('gone'))
-    expect(rows.map(row => row.id)).toEqual([gone.id, kept.id])
-    expect(rows.map(row => row.archived)).toEqual([true, false])
+    // Flat mode carries no archive section; the grouped archive group owns
+    // viewing, unarchive, and deletion of archived sessions.
+    expect(rows.map(row => row.id)).toEqual([kept.id])
+    expect(rows.map(row => row.archived)).toEqual([false])
   })
 })
 

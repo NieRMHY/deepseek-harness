@@ -314,8 +314,11 @@ export function deriveGroups(
 /**
  * Derive the flat session list ("In one list" mode): every session — fork
  * children included — as a top-level row, strictly newest-first. No grouping,
- * no parent/child adjacency. Content search lives outside this derivation
- * (see {@link deriveSearchResults}).
+ * no parent/child adjacency. Archived sessions stay out of this mode: the flat
+ * list has no archive section to hold them, and mixing them into the recency
+ * order would hide the archive boundary; the grouped mode's archive group owns
+ * their viewing, unarchive, and deletion surface. Content search lives outside
+ * this derivation (see {@link deriveSearchResults}).
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
  * @returns flat rows in render order.
@@ -330,7 +333,7 @@ export function deriveFlat(
   for (const id of list.ids) {
     const s = list.byId[id]
     if (s === undefined) continue
-    if (archivedSessionVisible(s, archived) || sessionVisible(s, list.current, archived)) {
+    if (sessionVisible(s, list.current, archived)) {
       rows.push(s)
     }
   }

@@ -133,7 +133,7 @@ export type WorkspaceBrowserInjected = {
   unarchiveSession: (sessionId: SessionId) => Promise<void>
   /**
    * Permanently delete a Session: durable log, workspace account, archive
-   * entry, and projection cache. The Host rejects live sessions.
+   * entry, and projection cache. Host 会先取消、flush 并卸载 live 会话再删除。
    */
   deleteSession: (sessionId: SessionId) => Promise<void>
   /**

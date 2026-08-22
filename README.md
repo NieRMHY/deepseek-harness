@@ -8,7 +8,7 @@ It uses an architecture where **everything is a plugin**, and is powered by [Cor
 
 ## NieRMHY fork additions
 
-This fork adds three opinionated changes on top of `0.1.0-rc.7`; see [`mhy/README.md`](mhy/README.md) for details:
+This fork adds three opinionated changes on top of `0.1.1-rc.2`; see [`mhy/README.md`](mhy/README.md) for details:
 
 - Archived sessions are visible again with unarchive and permanent delete.
 - OpenAI-compatible gateways expose DeepSeek reasoning effort (`low`/`high`/`max`) and an explicit `supportsDeveloperRole` passthrough.
