@@ -313,17 +313,11 @@ export class SessionCommandController {
     const hasImage = request.content.some(part => part.type === 'image')
     const admit = async (): Promise<SessionPromptValue> => {
       try {
-        if (hasImage) {
-          const current = this.agents.selectionFor(agent).current
-          const model = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
-          if (model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
-            throw new RemoteError(
-              'session/attachment-invalid',
-              `Model "${current.model}" does not support image input.`,
-              { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-            )
-          }
-        }
+        // Modify by MHY, 2026-09-05：图片能力检查从硬拒改为放行。text-only 模型
+        // 的图片在 llm 序列化层已有确定性占位降级（textOnlyImageText：
+        // "[image omitted because this model accepts text only…]"），模型仍能
+        // 看到占位说明与文本；agent 也可用文件/视觉工具离线识图。前端不应以
+        // 模型能力为由阻断发送。
         const content = await admitPromptContent(this.ctx.attachments, request.content)
         const message: UserMessage = createUserMessage({ content, source })
         if (request.mode === 'steer') agent.steer(message)

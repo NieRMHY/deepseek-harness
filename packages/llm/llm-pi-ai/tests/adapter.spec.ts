@@ -902,12 +902,13 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
+  it('projects images to placeholders for text-only models instead of rejecting (Modify by MHY)', async () => {
     const adapter = adapterOf({ openai: {}, deepseek: {} })
     const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
       for await (const _chunk of adapter.stream(options)) { /* drain */ }
     }
 
+    // text-only 模型：图片走占位降级，不再 UNSUPPORTED_CONTENT 硬拒。
     await expect(drain({
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
@@ -915,7 +916,8 @@ describe('provider profile lifecycle', () => {
         content: [{ type: 'image', attachment: IMAGE_REF }],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+    })).resolves.toBeUndefined()
+    // image-capable 模型但 attachment 服务缺失：仍硬拒（无法解析图片字节）。
     await expect(drain({
       provider: 'openai',
       model: 'gpt-4.1',
