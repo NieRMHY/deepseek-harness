@@ -20,11 +20,23 @@ import {
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
 
+// Add by MHY, archive management: the registry-global archive set renders as its own trailing group.
 /** Group key for the registry-global archive set. */
 export const ARCHIVED_KEY = '__archived__'
 
-/** Display label for the ungrouped bucket row. */
-export const UNGROUPED_LABEL = 'Ungrouped'
+/**
+ * Resolve the Workspace browser group that owns one Session.
+ * @param workspaces - authoritative Workspace membership.
+ * @param sessionId - Session whose browser group is required.
+ * @returns owning Workspace id, or {@link UNGROUPED_KEY} when no Workspace accounts for it.
+ */
+export function owningGroupKey(
+  workspaces: readonly WorkspaceView[],
+  sessionId: SessionId,
+): string {
+  return (workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
+    ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
+}
 
 /** Pending interaction kinds with dedicated Workspace-row presentation. */
 export type SessionPendingInteractionStatus = 'approval' | 'plan-review' | 'question'
@@ -309,8 +321,7 @@ export function deriveGroups(
   const descendants = indexSubagentDescendants(list.byId)
   const currentGroup = list.current === undefined
     ? undefined
-    : (workspaces.find(w => w.sessionIds.includes(list.current as SessionId))?.workspaceId as string | undefined)
-        ?? UNGROUPED_KEY
+    : owningGroupKey(workspaces, list.current)
   const groups: GroupNode[] = []
   for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
