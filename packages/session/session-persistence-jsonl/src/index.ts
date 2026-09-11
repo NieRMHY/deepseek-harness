@@ -439,8 +439,14 @@ class JsonlSessionPersistence extends SessionPersistence {
     // Invalidate the parsed-log memo the same way every other local mutation
     // does; a surviving entry would keep serving a deleted transcript.
     this.coldLogMemo.delete(id)
-    await rm(resolved.currentPath)
-    const dir = dirname(resolved.currentPath)
+    // Modify by MHY, 2026-09-10：删的是**实际选中的那一代**（sourcePath），不是
+    // currentPath。currentPath 是按 sessionFormatCatalog.currentVersion 拼出来的
+    // "当前代"路径，只用于 acquireLease 的锁粒度；对尚未迁移的历史会话
+    // （磁盘上只有 v0 的 session.jsonl.zstd），它指向不存在的 session.v3.jsonl.zstd，
+    // rm 直接 ENOENT —— 表现为"很多历史归档会话删不掉"。sourcePath 才是
+    // findLog 真正解析到的那份文件，对已迁移与未迁移两种形态都正确。
+    await rm(resolved.sourcePath)
+    const dir = dirname(resolved.sourcePath)
     try {
       await rmdir(dir)
     } catch (error: unknown) {
