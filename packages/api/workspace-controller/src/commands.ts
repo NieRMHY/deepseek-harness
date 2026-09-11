@@ -203,7 +203,20 @@ export class WorkspaceCommands {
     if (persistence === undefined) {
       throw new Error('session deletion is unavailable: no session persistence service is composed')
     }
-    await persistence.delete(sessionId)
+    // Modify by MHY, 2026-09-11：persistence.delete() 的返回值必须检查。
+    // 它返回 false 表示"磁盘上没找到该会话的日志"——此时什么都没删掉。
+    // 旧代码丢弃返回值、无条件继续 forgetSession()，而 forgetSession 会把该 id
+    // 从归档集合里摘掉：结果是**日志还在磁盘上、却从归档列表消失**，UI 按
+    // sessionVisible(!archived) 判定，会话就"跑到未归档里去了"——用户报告的
+    // 正是这个现象。只有确实删除成功才解除归档；否则如实报错。
+    const removed = await persistence.delete(sessionId)
+    if (!removed) {
+      throw new RemoteError(
+        'session/not-found',
+        `session "${sessionId}" has no stored transcript to delete`,
+        { sessionId },
+      )
+    }
     await this.ctx.workspaceRegistry.forgetSession(sessionId)
     await this.ctx.get('sessionProjectionCache')?.forget(sessionId)
     return {
