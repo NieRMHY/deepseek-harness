@@ -217,6 +217,11 @@ export class WorkspaceCommands {
         { sessionId },
       )
     }
+    // 客户端靠 api-session/removed 摘除列表行，而该事件由 session/disposed 转发，
+    // 只对"活会话"触发；已归档/久未打开的会话不在 live registry 里（上面的 if
+    // 分支没进）。因此 forgetSession 内部会发出 workspace/session-forgotten，
+    // 由 session-controller 补发一次移除通知——见 workspace/src/index.ts。
+    // Modify by MHY, 2026-09-11
     await this.ctx.workspaceRegistry.forgetSession(sessionId)
     await this.ctx.get('sessionProjectionCache')?.forget(sessionId)
     return {
