@@ -149,6 +149,15 @@ export class SessionController extends TypertRemoteService {
     ctx.on('session/disposed', (session) => {
       ctx.emit('api-session/removed', session.id)
     })
+    // Add by MHY, 2026-09-11：补发非活动会话的移除通知。
+    // 删除一个已归档 / 久未打开的会话时，它不在 live registry 里，
+    // session/disposed 不会触发，客户端就一直留着那一行；而工作区侧按
+    // !archived 判定归属，于是把已删会话渲染进「未分组」。注册表
+    // forgetSession 发出的这个事件补上缺口，语义与 disposed 一致：
+    // 该会话已从 Host 注销，列表消费方应丢弃它。
+    ctx.on('workspace/session-forgotten', (sessionId) => {
+      ctx.emit('api-session/removed', sessionId)
+    })
     ctx.on('agent/status', ({ agent, status }) => {
       ctx.emit('api-session/status', agent.id, status === 'running')
     })
