@@ -427,12 +427,18 @@ class JsonlSessionPersistence extends SessionPersistence {
 
   // Add by MHY: fork 独有，上游 0.1.5 无会话删除原语
   /**
-   * Delete one materialized transcript and, when that leaves the session
-   * directory empty, the directory itself. Attachments and other
-   * session-owned artifacts keep the directory non-empty, so this never
-   * removes a file it did not write. The selected generation is the highest
-   * canonical one, so a stale predecessor left beside it is deliberately
-   * kept rather than silently destroyed.
+   * Delete every materialized generation of one transcript and, when that
+   * leaves the session directory empty, the directory itself. Attachments and
+   * other session-owned artifacts keep the directory non-empty, so this never
+   * removes a file it did not write.
+   *
+   * Every canonical generation goes, not just the highest: the format catalog
+   * publishes a successor beside its predecessor and never removes the source,
+   * so one directory can hold vN and vN+1 at once. Leaving the predecessor
+   * behind would make the Session reappear under the next listing — the
+   * resolver picks the highest canonical generation, and a lower one is still
+   * a readable Session.
+   *
    * @param id - the persisted session to delete.
    * @param signal - optional cancellation for the lookup and unlink work.
    * @returns `true` when a materialized transcript existed and was deleted,
@@ -451,14 +457,38 @@ class JsonlSessionPersistence extends SessionPersistence {
     // Invalidate the parsed-log memo the same way every other local mutation
     // does; a surviving entry would keep serving a deleted transcript.
     this.coldLogMemo.delete(id)
-    // Modify by MHY, 2026-09-10：删的是**实际选中的那一代**（sourcePath），不是
-    // currentPath。currentPath 是按 sessionFormatCatalog.currentVersion 拼出来的
-    // "当前代"路径，只用于 acquireLease 的锁粒度；对尚未迁移的历史会话
-    // （磁盘上只有 v0 的 session.jsonl.zstd），它指向不存在的 session.v3.jsonl.zstd，
-    // rm 直接 ENOENT —— 表现为"很多历史归档会话删不掉"。sourcePath 才是
-    // findLog 真正解析到的那份文件，对已迁移与未迁移两种形态都正确。
-    await rm(resolved.sourcePath)
+    // Modify by MHY, 2026-09-10：不能用 currentPath。它是按
+    // sessionFormatCatalog.currentVersion 拼出来的"当前代"路径，只用于
+    // acquireLease 的锁粒度；对尚未迁移的历史会话（磁盘上只有 v0 的
+    // session.jsonl.zstd），它指向不存在的 session.v3.jsonl.zstd，rm 直接
+    // ENOENT —— 表现为"很多历史归档会话删不掉"。sourcePath 才是 findLog 真正
+    // 解析到的那份，对已迁移与未迁移两种形态都正确。
+    //
+    // Modify by MHY, 2026-09-24：但只删 sourcePath（最高代）在 v4 之后不够。
+    // 一次"写打开"会把 v3 迁移成 v4 却**从不删除源文件**，同一目录会同时存在
+    // session.v3.jsonl(.zstd) 与 session.v4.jsonl(.zstd)。只删 v4 时 v3 留下：
+    // 下次列举 resolveGenerationInDirectory 又解析到 v3，会话重新出现；而下面的
+    // rmdir 因目录非空报 ENOTEMPTY，被 isNotEmptyError 吞掉后依然返回 true ——
+    // 接口报告"删除成功"，实际没删干净。删除的语义是"这份会话的磁盘记录不再
+    // 存在"，因此该目录里的每一代都要删。
     const dir = dirname(resolved.sourcePath)
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch (error: unknown) {
+      // 目录已被并发的删除者收走：目标已达成。
+      if (isENOENT(error)) return true
+      throw error
+    }
+    signal?.throwIfAborted()
+    const generationLogs = entries
+      .map(entry => entry.name)
+      .filter(name => parseGenerationLogFilename(name, this.compression) !== undefined)
+      .map(name => join(dir, name))
+    // 与 resolveGenerationInDirectory 一致：混用另一种压缩编码说明根配置被改过，
+    // 此时宁可报错也不猜哪一份是权威代。
+    if (generationLogs.length === 0) return false
+    await Promise.all(generationLogs.map(path => rm(path)))
     try {
       await rmdir(dir)
     } catch (error: unknown) {
