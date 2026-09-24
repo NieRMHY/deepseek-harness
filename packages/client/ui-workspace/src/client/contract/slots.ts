@@ -299,6 +299,43 @@ export interface ArchiveSessionInjected {
 }
 
 /**
+ * Add by MHY, 2026-09-24：本 fork 独有的会话彻底删除（官方有意不提供）。
+ *
+ * Delete action share: the row only raises the request, because deleting a
+ * Session destroys its log and every durable registry slot — the dialog entry
+ * in `shell.overlay` is the one place that confirms first.
+ */
+export interface SessionDeleteInjected {
+  /** Ask for confirmation to delete one Session outright. */
+  requestSessionDelete: (sessionId: SessionId) => void
+}
+
+/** A pending deletion confirmation. */
+export interface SessionDeleteConfirmRequest {
+  /** Session to delete. */
+  sessionId: SessionId
+  /** The row's display title, named in the dialog. */
+  displayTitle: string
+}
+
+/**
+ * Delete dialog share: the pending confirmation, its settlement, and the
+ * delete hop. The Host removes the persisted log, the projection checkpoint,
+ * every durable registry slot, and the archive-set entry; a Session with no
+ * stored transcript rejects.
+ */
+export interface SessionDeleteConfirmInjected {
+  hooks: {
+    /** The confirmation asked for, until the dialog consumes or cancels it. */
+    deleteRequest: HostObservable<SessionDeleteConfirmRequest | null>
+  }
+  /** Consume or cancel the pending confirmation. */
+  settleSessionDelete: () => void
+  /** Delete one Session outright; rejects when it has no stored transcript. */
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
+/**
  * A stop-and-archive confirmation the archive action asked for: the Host
  * refused the plain archive because this work still runs.
  */
@@ -389,6 +426,13 @@ export type SessionArchiveConfirmProps =
   & PropsLocale<'workspace'>
   & Omit<SessionArchiveConfirmInjected, 'hooks'>
   & PropsHooks<SessionArchiveConfirmInjected['hooks']>
+
+/** Props of the delete dialog entry in `shell.overlay`. */
+export type SessionDeleteConfirmProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionDeleteConfirmInjected, 'hooks'>
+  & PropsHooks<SessionDeleteConfirmInjected['hooks']>
 
 /** Props of the row toast entry in `shell.overlay`. */
 export type RowToastProps =
