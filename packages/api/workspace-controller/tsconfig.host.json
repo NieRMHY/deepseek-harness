@@ -10,11 +10,15 @@
     "src/types.ts",
     "src/commands.ts",
     "src/directory-picker.ts",
-    "src/feed.ts"
+    "src/feed.ts",
+    "src/default-directory.ts"
   ],
   "references": [
     {
       "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
     },
     {
       "path": "../../core/agent"
@@ -39,6 +43,9 @@
     },
     {
       "path": "../../util/deque"
+    },
+    {
+      "path": "../../util/native-command"
     },
     {
       "path": "../../workspace/workspace"
