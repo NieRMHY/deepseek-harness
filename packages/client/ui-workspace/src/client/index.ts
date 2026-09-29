@@ -38,9 +38,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import {
   type ArchiveSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
-    type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionDeleteConfirmInjected,
+  type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionDeleteConfirmInjected,
   type SessionDeleteConfirmRequest, type SessionDeleteInjected, type SessionRenameDialogInjected,
-  type SessionRenameTarget, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
+  type WorkspaceBrowserInjected, type WorkspacePickerInjected,
 } from './contract/slots.ts'
 import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './shortcuts.ts'
 import { UiWorkspaceService } from './navigation.ts'
