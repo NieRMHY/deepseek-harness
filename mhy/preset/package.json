@@ -1,0 +1,12 @@
+{
+  "name": "@niermhy/dsh-standard-preset",
+  "version": "0.2.1-rc.2",
+  "private": true,
+  "files": ["cordis.patch.yml", "router-core.mjs", "router-bootstrap-v1.mjs"],
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -451,6 +451,92 @@ describe('ClientWorkspaceModel', () => {
     expect(model.getSnapshot().archivedSessionIds).toEqual(['second'])
   })
 
+  // Add by MHY, deletion echoes share archive ordering with pushes and other mutations.
+  it('installs a successful session deletion archive set only after the reply', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('deleted'), sid('kept')])
+    const before = model.getSnapshot()
+    const gate = deferred<RemoteResult<WorkspaceDeleteSessionValue>>()
+    remote.onDeleteSession = () => gate.promise
+
+    const pending = model.deleteSession(sid('deleted'))
+    expect(remote.calls).toContainEqual({ method: 'deleteSession', request: { sessionId: 'deleted' } })
+    expect(model.getSnapshot()).toBe(before)
+    const result = remoteOk<WorkspaceDeleteSessionValue>({ deleted: true, archivedSessionIds: [sid('kept')] })
+    gate.resolve(result)
+    await expect(pending).resolves.toBe(result)
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['kept'])
+  })
+
+  it('leaves the archive projection unchanged when session deletion fails', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('kept')])
+    const before = model.getSnapshot()
+    const gate = deferred<RemoteResult<WorkspaceDeleteSessionValue>>()
+    remote.onDeleteSession = () => gate.promise
+
+    const pending = model.deleteSession(sid('kept'))
+    const result = workspaceError(new RemoteError('session/not-found', 'missing', { sessionId: sid('kept') }))
+    gate.resolve(result)
+    await expect(pending).resolves.toBe(result)
+    expect(model.getSnapshot()).toBe(before)
+  })
+
+  it('keeps a pushed archive set when a session deletion reply lands later', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('deleted')])
+    const gate = deferred<RemoteResult<WorkspaceDeleteSessionValue>>()
+    remote.onDeleteSession = () => gate.promise
+
+    const pending = model.deleteSession(sid('deleted'))
+    model.replaceArchived([sid('newly-archived')])
+    const before = model.getSnapshot()
+    gate.resolve(remoteOk({ deleted: true, archivedSessionIds: [] }))
+    await expect(pending).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot()).toBe(before)
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['newly-archived'])
+  })
+
+  it('keeps a newer archive mutation when a session deletion reply lands later', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('deleted')])
+    const deleteGate = deferred<RemoteResult<WorkspaceDeleteSessionValue>>()
+    const archiveGate = deferred<RemoteResult<WorkspaceArchiveValue>>()
+    remote.onDeleteSession = () => deleteGate.promise
+    remote.onArchiveSession = () => archiveGate.promise
+
+    const deletion = model.deleteSession(sid('deleted'))
+    const archive = model.archiveSession(sid('newly-archived'))
+    archiveGate.resolve(remoteOk({ archivedSessionIds: [sid('newly-archived')] }))
+    await expect(archive).resolves.toMatchObject({ ok: true })
+    const before = model.getSnapshot()
+    deleteGate.resolve(remoteOk({ deleted: true, archivedSessionIds: [] }))
+    await expect(deletion).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot()).toBe(before)
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['newly-archived'])
+  })
+
+  it('keeps a session deletion archive set when an older archive reply lands later', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    const archiveGate = deferred<RemoteResult<WorkspaceArchiveValue>>()
+    const deleteGate = deferred<RemoteResult<WorkspaceDeleteSessionValue>>()
+    remote.onArchiveSession = () => archiveGate.promise
+    remote.onDeleteSession = () => deleteGate.promise
+
+    const archive = model.archiveSession(sid('deleted'))
+    const deletion = model.deleteSession(sid('deleted'))
+    deleteGate.resolve(remoteOk({ deleted: true, archivedSessionIds: [] }))
+    await expect(deletion).resolves.toMatchObject({ ok: true })
+    archiveGate.resolve(remoteOk({ archivedSessionIds: [sid('deleted')] }))
+    await expect(archive).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot().archivedSessionIds).toEqual([])
+  })
+
   it('applies pin mutation echoes and leaves failed results unchanged', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)

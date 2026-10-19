@@ -14,7 +14,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
  * (session.spec.ts#rename), the entries' own arms with
  * session-actions.client.spec, the row's list rendering with rows.client.spec.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -111,7 +111,7 @@ describe('session rename through the assembled browser', () => {
         },
       )
     }
-    // `order` places plugin rows after the shipped rows (100/200/300/400)
+    // `order` places plugin rows after the shipped rows (100/200/300/400/450)
     // even when the later registration has the lower shadowing priority
     // assigned to dynamic browser packages; the first plugin row opens the
     // plugin group with a hairline.
@@ -123,7 +123,8 @@ describe('session rename through the assembled browser', () => {
     const trigger = within(row as HTMLElement).getByLabelText('会话“Persisted title”的操作')
     fireEvent.click(trigger)
     expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '置顶会话', '重命名', '分叉会话', '归档会话', 'Export action', 'Last action',
+      // Modify by MHY, 永久删除位于插件扩展行与最后一行之间。
+      '置顶会话', '重命名', '分叉会话', '归档会话', '复制 Session ID', 'Export action', '删除会话（彻底）', 'Last action',
     ])
     expect(view.getAllByRole('separator')).toHaveLength(1)
     const last = view.getByRole('menuitem', { name: 'Last action' })
@@ -131,7 +132,10 @@ describe('session rename through the assembled browser', () => {
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'End' })
     expect(document.activeElement).toBe(last)
+    const deleteRow = view.getByRole('menuitem', { name: '删除会话（彻底）' })
     fireEvent.keyDown(last, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(deleteRow)
+    fireEvent.keyDown(deleteRow, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(exportRow)
     fireEvent.click(exportRow)
     expect(selected).toHaveBeenCalledWith('export', SID, 'Persisted title')
@@ -140,6 +144,18 @@ describe('session rename through the assembled browser', () => {
     expect(view.queryByRole('menu')).toBeNull()
     await act(async () => { await Promise.resolve() })
     expect(document.activeElement).toBe(trigger)
+    const writeText = vi.fn(async () => {})
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    onTestFinished(() => {
+      if (clipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard')
+      else Object.defineProperty(navigator, 'clipboard', clipboard)
+    })
+    fireEvent.click(trigger)
+    fireEvent.click(view.getByRole('menuitem', { name: '复制 Session ID' }))
+    expect(view.queryByRole('menu')).toBeNull()
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(SID)
+    await view.findByText('Session ID 已复制')
     await runtime.dispose()
   })
 

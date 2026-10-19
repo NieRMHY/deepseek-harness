@@ -40,15 +40,7 @@ rc8 用法：
 - 自动加载 `AGENTS.md` / `CLAUDE.md`，项目根标记 `.git` / `.obsidian` / `.dsh-root`，兼容 Claude Code 工作流；
 - 完整 Standard 工具集：fs、搜索、编辑器、subagent、workflow、plan、web、skills、goal、todo 等。
 
-安装：
-
-```bash
-mkdir -p "$DSH_HOME/.agent-presets/niermhy-standard"
-cp -a mhy/preset/. "$DSH_HOME/.agent-presets/niermhy-standard/"
-# 在 settings.yaml 中设置
-# agent-presets:
-#   default: niermhy-standard
-```
+安装（0.2.1 起）：通过 `plugin_manager` 执行 `action: install_bundle`，`target` 设为本仓库 `mhy/preset` 的绝对路径。该 bundle 的 `cordis.patch.yml` 声明 `niermhy-standard`；安装后在新会话中选择 `NieRMHY-Standard`。旧 `.agent-presets` 目录不再被官方读取。
 
 ## 3. 归档会话可见、取消归档与彻底删除
 

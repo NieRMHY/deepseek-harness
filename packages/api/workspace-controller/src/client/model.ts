@@ -260,21 +260,20 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   /**
-   * Unarchive one Session and install the returned complete archive set.
-   * A reply superseded by a later archive request or a pushed set installs nothing.
-   * @param sessionId - Session to unarchive.
-   * @returns generated Remote result.
-   */
-  /**
    * Permanently delete one Session and install the returned archive set.
+   * A reply superseded by a later archive request or a pushed set installs nothing.
    * @param sessionId - Session to delete.
    * @returns generated Remote result.
    */
   async deleteSession(
     sessionId: WorkspaceDeleteSessionRequest['sessionId'],
   ): Promise<RemoteResult<WorkspaceDeleteSessionValue>> {
+    // Modify by MHY, deletion echoes must not overwrite newer archive changes.
+    const requestSeq = ++this.archiveRequestSeq
     const result = await this.remote.deleteSession({ sessionId })
-    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    if (result.ok && requestSeq === this.archiveRequestSeq) {
+      this.installArchived(result.value.archivedSessionIds)
+    }
     return result
   }
 

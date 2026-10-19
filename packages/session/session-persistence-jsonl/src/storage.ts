@@ -103,6 +103,11 @@ export class JsonlSessionHandle implements SessionHandle {
     private lease?: SessionWriteLease,
   ) {}
 
+  /** Add by MHY: settlement of an owner-started close; absent while the writer is live. */
+  get closingPromise(): Promise<void> | undefined {
+    return this.closing
+  }
+
   /** Exact fork-inherited prefix length stored with this session's log. */
   get inheritedEventCount(): SessionLogOffset {
     return this.state.inheritedEventCount
@@ -432,6 +437,20 @@ export class JsonlBackendTracker {
   }
 
   /**
+   * Add by MHY: join an owner-started close before claiming deletion.
+   * @param id - the session whose generations will be deleted.
+   * @throws {SessionAlreadyOwnedError} while a live writer or constructing claim remains.
+   */
+  async claimDelete(id: SessionId): Promise<void> {
+    const writer = this.writers.get(id)
+    if (writer !== null && writer !== undefined) {
+      const closing = writer.closingPromise
+      if (closing !== undefined) await closing
+    }
+    this.claimWrite(id)
+  }
+
+  /**
    * Roll a failed write open back.
    * @param id - the session whose claim is dropped.
    */
@@ -528,40 +547,44 @@ export class JsonlBackendTracker {
    * sessions' events by id; the teardown effect closes every open handle —
    * close drains the routed buffer — and aggregates failures. This provider
    * owns no separate storage connection, so closing handles is the complete
-   * teardown. Registrations are effects of the current fiber.
-   * @param ctx - the backend's context.
+   * teardown. The returned effect removes listeners before closing handles.
+   * @param ctx - the backend's resource-owning context.
+   * @returns the disposer to run after persistence consumers finish unloading.
    */
-  install(ctx: Context): void {
-    ctx.on('session/event', (session: Session, event) => {
-      this.writers.get(session.id)?.enqueueLive(event, (error) => {
-        ctx.logger.warn(`session-persistence: background write for session "${session.id}" failed (buffered events retained): ${String(error)}`)
-      })
-    })
-    ctx.on('session/flush', (session: Session) => {
-      const writer = this.writers.get(session.id)
-      if (writer === null || writer === undefined) return undefined
-      return (async () => {
-        await writer.drainLive()
-        await writer.flush()
-      })()
-    })
-    ctx.on('session/disposed', (session: Session) => {
-      const writer = this.writers.get(session.id)
-      if (writer === null || writer === undefined) return
-      writer.close().catch((error: unknown) => {
-        ctx.logger.warn(`session-persistence: final drain for session "${session.id}" failed: ${String(error)}`)
-      })
-    })
-    ctx.effect(() => async () => {
-      const errors: unknown[] = []
-      for (const handle of [...this.openHandles]) {
-        try {
-          await handle.close()
-        } catch (error: unknown) {
-          errors.push(error)
+  install(ctx: Context): () => Promise<void> {
+    const { writers, openHandles, name } = this
+    return ctx.effect(function* () {
+      yield async () => {
+        const errors: unknown[] = []
+        for (const handle of [...openHandles]) {
+          try {
+            await handle.close()
+          } catch (error: unknown) {
+            errors.push(error)
+          }
         }
+        if (errors.length > 0) throw new AggregateError(errors, `${name} dispose failed`)
       }
-      if (errors.length > 0) throw new AggregateError(errors, `${this.name} dispose failed`)
-    }, `${this.name} open handles`)
+      yield ctx.on('session/event', (session: Session, event) => {
+        writers.get(session.id)?.enqueueLive(event, (error) => {
+          ctx.logger.warn(`session-persistence: background write for session "${session.id}" failed (buffered events retained): ${String(error)}`)
+        })
+      })
+      yield ctx.on('session/flush', (session: Session) => {
+        const writer = writers.get(session.id)
+        if (writer === null || writer === undefined) return undefined
+        return (async () => {
+          await writer.drainLive()
+          await writer.flush()
+        })()
+      })
+      yield ctx.on('session/disposed', (session: Session) => {
+        const writer = writers.get(session.id)
+        if (writer === null || writer === undefined) return
+        writer.close().catch((error: unknown) => {
+          ctx.logger.warn(`session-persistence: final drain for session "${session.id}" failed: ${String(error)}`)
+        })
+      })
+    }, `${this.name} live routing and open handles`)
   }
 }

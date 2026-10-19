@@ -20,15 +20,15 @@
  */
 
 import {
-  applyPersona, bandFor, bandOf, coreFor, parseMode, personaFor, sessionMode, testinessFor, clamp01,
-  isComplexTask,
+  applyPersona, bandFor, bandOf, coreFor, parseMode, personaFor, ReadSessionRouting, testinessFor, clamp01,
+  isComplexTask, extractText, classifyTask, // Modify by MHY, 解析首条用户文本后使用核心任务分类器。
 } from './router-core.mjs'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'router-bootstrap'
 
 /** Prompt assembly, the tools registry, and the LLM route must exist. */
-export const inject = ['systemPrompt', 'tools', 'llm']
+export const inject = ['systemPrompt', 'tools', 'llm', 'sessionQuery'] // Modify by MHY, 历史读取走公开 observation 服务。
 
 /** Minimal spec → JSON Schema compiler (subset of defineTool's work). */
 function toJsonSchema(spec) {
@@ -46,8 +46,22 @@ function toJsonSchema(spec) {
 
 export function apply(ctx, config) {
   const overrides = new Map() // session id -> explicit mode (number 0..1)
-  const agents = new Map() // session id -> Agent (live handle, in-process only)
   const firstUserText = new Map() // session id -> first REAL user message text (issue #3 fix)
+
+  // Add by MHY, 实时文本必须先归类，assembly、指导与工具状态共用同一模式。
+  async function RoutedMode(session) {
+    const routing = await ReadSessionRouting(session, ctx.sessionQuery)
+    const text = routing.firstUserText || firstUserText.get(session.id) || ''
+    return overrides.get(session.id) ?? classifyTask(text)
+  }
+
+  // Add by MHY, claim 发生在 assemble 前，user/message 的持久化发生在 assemble 后。
+  ctx.on('agent/inbox/claimed', function CaptureClaimedMessage({ agent, message }) {
+    const text = extractText(message).trim()
+    if (message.source?.kind === 'user' && text && !firstUserText.has(agent.session.id)) {
+      firstUserText.set(agent.session.id, text)
+    }
+  })
 
   // ── 路由模式（v0.2.0 命名，用户定义）───────────────────────────────────────
   // standard（默认，新）: RL 接口还原——首轮只有 RL 训练句 + shell/str_replace_editor，
@@ -70,14 +84,9 @@ export function apply(ctx, config) {
     const agent = context.agent
     if (agent === undefined) return assembled
     const session = agent.session
-    agents.set(session.id, agent)
 
-    // issue #3 fix: the first assembly happens before the first user/message
-    // event lands in session.events, so sessionMode() saw an empty transcript
-    // and injected the WEAK band on the path-committing first request. Use the
-    // live text captured by the session/event listener (or inbox pending) so
-    // the first request carries the REAL classification.
-    const mode = overrides.get(session.id) ?? firstUserText.get(session.id) ?? sessionMode(session)
+    // Modify by MHY, 首条已 claim 输入与恢复的历史使用同一分类路径。
+    const mode = await RoutedMode(session)
     const modelId = agent.options?.model
 
     // ── 模式分派 ──
@@ -101,7 +110,7 @@ export function apply(ctx, config) {
       core = new Set(legacyCore(mode))
     }
 
-    if (session.events.some((event) => event.type === 'tool/call')) {
+    if ((await ReadSessionRouting(session, ctx.sessionQuery)).hasToolCall) {
       return { ...assembled, sections, contexts: [] } // promoted: full catalog
     }
 
@@ -122,7 +131,7 @@ export function apply(ctx, config) {
 
   // ── near-field routing guidance for weak mode (P14/P16/P17/P19/P20) ─────
   // Every REAL user message in a weak-mode session gets ONE fixed guidance
-  // message appended to the inbox right after it (near field, cache-neutral).
+  // message appended to the admitted batch right after it (near field, cache-neutral).
   // v19: depth-adaptive — SIMPLE tasks get the fast-convergence guide;
   // COMPLEX tasks get the deep-exploration guide (depth-first, information-
   // driven stop signal). The persona carries no hard converge anchor
@@ -133,29 +142,23 @@ export function apply(ctx, config) {
   const GUIDE_DEEP =
     '\nRouter: classify this task (build or fix) now, then adopt the matching style — build: direct production; fix: inspect-first. Think deeply about the architecture, edge cases, and integration points. Do not spend reasoning on the environment or tooling. Produce when your information is complete. End each reasoning block with a decision or an information need.'
 
-  ctx.on('session/event', (session, event) => {
-    if (event.type !== 'user/message') return
-    const data = event.data ?? {}
-    if (data.source?.kind !== 'user') return // only real user messages
-    const text = extractText(data)
-    if (!firstUserText.has(session.id) && text.trim()) {
-      firstUserText.set(session.id, text.trim()) // issue #3: capture BEFORE assembly
-    }
-    const agent = ctx.get('agent')
-    const target = agent !== undefined && agent.session === session ? agent : [...agents.values()].find((a) => a.session === session)
-    if (target === undefined || target.inbox === undefined) return
-    const mode = overrides.get(session.id) ?? firstUserText.get(session.id) ?? sessionMode(session)
-    if (bandOf(mode) !== 'weak') return // strong modes need no guidance
-    if (!text.trim()) return
-    const guide = isComplexTask(text) ? GUIDE_DEEP : GUIDE_WEAK
-    try {
-      target.inbox.append('next-step', {
+  // Modify by MHY, Session 发布回调内不能重入 append；pre-step 返回本轮的持久化消息。
+  ctx.on('agent/pre-step', async function GuideMessages({ agent }, next) {
+    const decision = await next()
+    if (decision.kind !== 'enter' || bandOf(await RoutedMode(agent.session)) !== 'weak') return decision
+    const messages = []
+    for (const message of decision.messages) {
+      messages.push(message)
+      const text = extractText(message).trim()
+      if (message.source?.kind !== 'user' || !text) continue
+      messages.push({
         id: `router-guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         role: 'user',
         source: { kind: 'plugin', plugin: 'router-bootstrap' },
-        content: [{ type: 'text', text: guide }],
+        content: [{ type: 'text', text: isComplexTask(text) ? GUIDE_DEEP : GUIDE_WEAK }],
       })
-    } catch { /* duplicate/ordering races: skip */ }
+    }
+    return { ...decision, messages }
   })
 
   // ── router visibility & tuning (agent self-optimization) ────────────────
@@ -184,11 +187,13 @@ export function apply(ctx, config) {
     description: 'Show this session\'s reasoning-mode routing: mode, band, persona, first-turn core tools, test-suppression, and whether an override is active.',
     parameters: {},
     output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
-    execute() {
-      const session = currentSession()
+    // Modify by MHY, 0.2.1 工具回调由 exec.agent 携带调用所属会话。
+    async execute(_args, exec) {
+      const agent = exec.agent
+      const session = agent?.session
       if (session === undefined) return 'no agent session'
-      const mode = overrides.get(session.id) ?? sessionMode(session)
-      const modelId = currentAgent()?.options?.model
+      const mode = await RoutedMode(session)
+      const modelId = agent.options?.model
       return [
         `router-mode=${routerMode} (standard=RL接口还原 / spec=深度思考优先)`,
         `mode=${fmtMode(mode)} (band=${bandFor(mode)})`,
@@ -205,14 +210,15 @@ export function apply(ctx, config) {
     description: 'Set this session\'s reasoning mode: spec (plan-first) / weak (internal routing, model decides per task) / mixed (transition, trap) / react (doer). Accepts band names, 0-100, or 0.0-1.0; use auto to return to task classification. The next request applies it.',
     parameters: modeSpec,
     output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
-    execute(args) {
+    // Modify by MHY, 设置模式只能写入本次工具调用的 session。
+    async execute(args, exec) {
       const parsed = parseMode(args.mode)
       if (parsed === null) return `invalid mode "${args.mode}": use spec/weak/mixed/react, 0-100, 0.0-1.0, or auto`
-      const session = currentSession()
+      const session = exec.agent?.session
       if (session === undefined) return 'no agent session'
       if (parsed === 'auto') overrides.delete(session.id)
       else overrides.set(session.id, parsed === 'weak' ? 'weak' : clamp01(parsed))
-      const current = overrides.get(session.id) ?? sessionMode(session)
+      const current = await RoutedMode(session)
       return `mode=${fmtMode(current)} (band=${bandFor(current)}) — next request applies`
     },
   })
@@ -230,11 +236,11 @@ export function apply(ctx, config) {
       maxTokens: { type: 'number', description: 'output cap (default 1024)' },
     },
     output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
-    async execute(args) {
+    // Modify by MHY, 隔离调用沿用本次工具调用的模型路由。
+    async execute(args, exec) {
       const parsed = parseMode(args.mode)
       if (parsed === null || parsed === 'auto') return `invalid mode "${args.mode}"`
-      const session = currentSession()
-      const agent = session === undefined ? undefined : [...agents.values()].find((a) => a.session === session)
+      const agent = exec.agent
       if (agent === undefined || agent.options === undefined) return 'no agent route available'
       const { provider, model } = agent.options
       if (!provider || !model) return 'agent route missing provider/model'
@@ -262,16 +268,4 @@ export function apply(ctx, config) {
       return `[mode-subagent ${bandFor(parsed)} | reasoning ${reasoningChars} chars]\n${head}${text.length > 3000 ? '\n…(truncated)' : ''}`
     },
   })
-
-  function currentSession() {
-    const agent = ctx.get('agent')
-    if (agent !== undefined && agent.session !== undefined) return agent.session
-    const last = [...agents.values()].at(-1)
-    return last?.session
-  }
-
-  function currentAgent() {
-    const session = currentSession()
-    return session === undefined ? undefined : [...agents.values()].find((a) => a.session === session)
-  }
 }

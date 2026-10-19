@@ -233,14 +233,21 @@ export class WorkspaceCommands {
 
   /**
    * Permanently delete one Session: its persisted log, projection-cache
-   * checkpoint, every durable registry slot, and its archive-set entry. A
-   * live Session is cancelled, flushed, and detached first. Idempotent for a
-   * Session that no longer exists anywhere.
+   * checkpoint, every durable registry slot, and its archive-set entry.
+   * Modify by MHY: Session work is stopped through the Workspace providers
+   * before a live Session is cancelled, flushed, and detached. A stop or flush
+   * failure preserves its stored transcript and registry slots.
    * @param request - Session identity to delete.
    * @returns deletion receipt plus the complete updated archive set.
    */
   async deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue> {
     const sessionId = request.sessionId
+    const persistence = this.ctx.get('sessionPersistence')
+    if (persistence === undefined) {
+      throw new Error('session deletion is unavailable: no session persistence service is composed')
+    }
+    // Modify by MHY, stop providers also own work for cold Sessions; a failed stop must preserve the transcript.
+    await this.ctx.parallel('workspace/session-stop', { sessionId })
     const liveSession = this.ctx.sessions.get(sessionId)
     if (liveSession !== undefined) {
       const agent = this.ctx.agents.get(sessionId)
@@ -251,10 +258,6 @@ export class WorkspaceCommands {
       await this.ctx.sessions.flush(liveSession)
       this.ctx.agents.remove(sessionId)
       this.ctx.sessions.remove(sessionId)
-    }
-    const persistence = this.ctx.get('sessionPersistence')
-    if (persistence === undefined) {
-      throw new Error('session deletion is unavailable: no session persistence service is composed')
     }
     // Modify by MHY, 2026-09-11：persistence.delete() 的返回值必须检查。
     // 它返回 false 表示"磁盘上没找到该会话的日志"——此时什么都没删掉。

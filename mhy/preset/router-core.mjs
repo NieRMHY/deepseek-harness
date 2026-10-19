@@ -145,11 +145,33 @@ export function classifyTask(text) {
   return 'weak'
 }
 
-/** Per-session mode derived from durable events (resume-safe). */
-export function sessionMode(session) {
-  const events = session.events
-  const userMsg = events.find((e) => e.type === 'user/message')
-  return classifyTask(extractText(userMsg?.data))
+// Add by MHY, 0.2.1 Session 无 events；通过公开 observation/cursor 增量读取历史。
+const routingStates = new WeakMap()
+
+export async function ReadSessionRouting(session, sessionQuery) {
+  const previous = routingStates.get(session) ?? { cursor: -1, firstUserText: '', hasToolCall: false }
+  if (previous.cursor === session.seq - 1) return previous
+  const observation = await sessionQuery.observeSession(session.id, { projectionMode: 'none' })
+  try {
+    const state = { ...previous, cursor: observation.cursor }
+    for (const event of observation.events.slice(previous.cursor + 1)) {
+      if (event.type === 'tool/call') state.hasToolCall = true
+      if (event.type !== 'user/message' || state.firstUserText) continue
+      const data = event.data.message ?? event.data
+      if (data.source?.kind === 'user') state.firstUserText = extractText(data).trim()
+    }
+    const newer = routingStates.get(session)
+    if (newer !== undefined && newer.cursor > state.cursor) return newer
+    routingStates.set(session, state)
+    return state
+  } finally {
+    observation[Symbol.dispose]()
+  }
+}
+
+/** Per-session mode derived from the public Session observation (resume-safe). */
+export async function sessionMode(session, sessionQuery) {
+  return classifyTask((await ReadSessionRouting(session, sessionQuery)).firstUserText)
 }
 
 export function extractText(data) {
