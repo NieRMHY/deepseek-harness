@@ -1,6 +1,6 @@
 # NieRMHY fork 特色修改
 
-这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 在官方 `0.1.1-rc.2` 之上的三组特色修改。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
+这是 [NieRMHY/deepseek-harness](https://github.com/NieRMHY/deepseek-harness) 在官方 `0.2.1-rc.3` 之上的特色修改（当前跟踪 rc.3；合并上游后请同步这里的版本号）。上游 Issues 已关闭，反馈请走官方 [Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)。
 
 ## 1. 自定义 OpenAI 兼容中转支持 DeepSeek 思考强度
 
@@ -49,6 +49,7 @@ rc8 用法：
 - 侧边栏会话列表新增「已归档」分组，归档会话可点开查看历史；
 - 归档会话行菜单提供「取消归档」和「删除会话」；
 - 新增 RPC：`workspace.unarchiveSession`、`workspace.deleteSession`，删除会清理会话日志、工作区记账、归档集合和投影缓存；live 会话会先停止并 flush 再删除；
+- 彻底删除会连带删除该会话派生出的全部 subagent 子会话（含孙会话，逐层停止并删日志；fork 无 subagent origin，保留不删），避免侧边栏过滤后留下无法清理的孤儿；
 - 打开归档会话不会再被旧的「当前选择在归档集合就清空」逻辑弹回新对话界面。
 
 涉及包：`dsh-workspace`、`dsh-session-persistence`（JSONL / SQLite）、`dsh-session-projection-cache`、`dsh-host-apiproxy`、`dsh-client-runtime`、`dsh-client-ui-workspace`，相应单元/组件测试已同步更新。

@@ -6,15 +6,15 @@ DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek 
 
 It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
 
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
-
 ## NieRMHY fork additions
 
-This fork adds three opinionated changes on top of `0.1.1-rc.2`; see [`mhy/README.md`](mhy/README.md) for details:
+This fork tracks upstream `0.2.1-rc.3` and adds a small set of opinionated changes; [`mhy/README.md`](mhy/README.md) documents each one:
 
-- Archived sessions are visible again with unarchive and permanent delete.
-- OpenAI-compatible gateways expose DeepSeek reasoning effort (`low`/`high`/`max`) and an explicit `supportsDeveloperRole` passthrough.
-- The NieRMHY-Standard preset with task-aware routing and AGENTS.md/CLAUDE.md project roots.
+- Archived sessions stay reachable: an archived group in the sidebar, unarchive, and permanent deletion.
+- Permanent Session deletion also removes every subagent Session it delegated, so no orphan transcripts remain on disk; a fork shares lineage but is an independent conversation and is kept.
+- The NieRMHY preset family with task-aware routing (`niermhy-standard`, `niermhy-glm*`) and `.git`/`.obsidian`/`.dsh-root` project roots.
+
+Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
 ## Developer preview
 

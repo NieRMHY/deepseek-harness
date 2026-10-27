@@ -6,15 +6,15 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
 
+## NieRMHY 分支修改
+
+本分支跟随上游 `0.2.1-rc.3`，在此基础上追加少量定向修改，逐项说明见 [`mhy/README.md`](mhy/README.md)：
+
+- 归档会话保持可见：侧边栏「已归档」分组、取消归档、彻底删除。
+- 彻底删除会话会连带删除它派生出的全部 subagent 子会话，磁盘上不再留下无主日志；fork 共享血缘但属于独立会话，保留不删。
+- NieRMHY 预设族带任务感知路由（`niermhy-standard`、`niermhy-glm*`），并把 `.git`/`.obsidian`/`.dsh-root` 认作项目根。
+
 文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
-
-## NieRMHY fork 特色
-
-这个 fork 在 `0.1.1-rc.2` 之上加入三组特色修改，详见 [`mhy/README.md`](mhy/README.md)：
-
-- 归档会话重新可见，支持取消归档和彻底删除。
-- OpenAI 兼容中转支持 DeepSeek 思考强度（`low`/`high`/`max`），并透传显式的 `supportsDeveloperRole`。
-- NieRMHY-Standard 预设：任务感知路由 + AGENTS.md/CLAUDE.md 项目根加载。
 
 ## 开发者预览
 
