@@ -387,7 +387,9 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('unpinSession') unpinSession(request: WorkspaceUnpinSessionRequest): Promise<WorkspacePinValue>
 
 /**
- * Permanently delete one Session (log, projection, accounting, archive entry).
+ * Permanently delete one Session and every subagent Session it delegated:
+ * their logs, projections, accounting, and archive entries. A fork shares
+ * `parentSession` but is an independent conversation and is kept.
  * @param request - Session identity to delete.
  * @returns deletion receipt plus the complete updated archive set.
  */

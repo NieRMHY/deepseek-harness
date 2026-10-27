@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionPersistenceRevision, type SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import LocalJobRegistry from '../../../jobs/jobs-local/src/index.ts'
 import type { JobOutcome } from '../../../jobs/jobs/src/index.ts'
@@ -57,8 +58,9 @@ describe('permanent Session deletion stops activity', () => {
     const foreign = await service.create(foreignId, { title: 'Keep reminder', prompt: 'Later', after_seconds: 3_600 })
     const stopping = Promise.withResolvers<undefined>()
     const release = Promise.withResolvers<undefined>()
+    // Add by MHY, 2026-10-21：子会话现在也走同一条停止路径，这里只拦父会话的停止点。
     ctx.on('workspace/session-stop', async ({ sessionId }) => {
-      expect(sessionId).toBe(parent.id)
+      if (sessionId !== parent.id) return
       order.push('stop')
       stopping.resolve(undefined)
       await release.promise
@@ -66,13 +68,15 @@ describe('permanent Session deletion stops activity', () => {
     ctx.on('session/flush', () => { order.push('flush') })
     ctx.on('agent/disposed', ({ agent }) => { if (agent.id === parent.id) order.push('agent-removed') })
     ctx.on('session/disposed', (session) => { if (session.id === parent.id) order.push('session-removed') })
-    removeStored.mockImplementation(async () => {
-      expect(await service.list({ sessionId: parent.id })).toEqual([])
-      expect(cancelJob).toHaveBeenCalledTimes(1)
-      expect(childCancel).toHaveBeenCalledWith({ kind: 'parent' })
-      expect(ctx.agents.get(parent.id)).toBeUndefined()
-      expect(ctx.sessions.get(parent.id)).toBeUndefined()
-      order.push('delete')
+    removeStored.mockImplementation(async (sessionId) => {
+      if (sessionId === parent.id) {
+        expect(await service.list({ sessionId: parent.id })).toEqual([])
+        expect(cancelJob).toHaveBeenCalledTimes(1)
+        expect(childCancel).toHaveBeenCalledWith({ kind: 'parent' })
+        expect(ctx.agents.get(parent.id)).toBeUndefined()
+        expect(ctx.sessions.get(parent.id)).toBeUndefined()
+      }
+      order.push(`delete:${sessionId}`)
       return true
     })
     const deleting = commands.deleteSession({ sessionId: parent.id })
@@ -84,10 +88,89 @@ describe('permanent Session deletion stops activity', () => {
       release.resolve(undefined)
     }
     await expect(deleting).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
-    expect(order).toEqual(['stop', 'cancel', 'idle', 'flush', 'agent-removed', 'session-removed', 'delete'])
+    expect(order).toEqual([
+      'stop',
+      'flush',
+      'delete:delete-child',
+      'cancel',
+      'idle',
+      'flush',
+      'agent-removed',
+      'session-removed',
+      'delete:delete-live',
+    ])
     expect(cancelParent).toHaveBeenCalledWith({ kind: 'disposed' })
+    expect(ctx.sessions.get(child.id)).toBeUndefined()
     expect((await ctx.jobs.wait(jobId, 1_000, parent.id)).status).toBe('killed')
     expect((await service.list({ sessionId: foreignId })).map(row => row.id)).toEqual([foreign.id])
+  })
+
+  it('deletes stored subagent descendants with their parent and keeps forks', async () => {
+    const { ctx, commands, removeStored, forget } = await setup()
+    const parent = ctx.sessions.create(SessionId('cascade-root'))
+    const child = ctx.sessions.create(SessionId('cascade-child'), {
+      meta: { parentSession: parent.id, origin: 'subagent', delegationDepth: 1 },
+    })
+    const grandchild = ctx.sessions.create(SessionId('cascade-grandchild'), {
+      meta: { parentSession: child.id, origin: 'subagent', delegationDepth: 2 },
+    })
+    const fork = ctx.sessions.fork(parent.id, undefined, SessionId('cascade-fork'))
+    const snapshots: SessionPersistenceSnapshot[] = [child, grandchild, fork].map(session => ({
+      header: session.header,
+      revision: SessionPersistenceRevision(`test:${session.id}`),
+    }))
+    Object.assign(ctx.sessionPersistence, { list: async () => snapshots })
+    for (const session of [child, grandchild, fork]) ctx.sessions.remove(session.id)
+    await expect(commands.deleteSession({ sessionId: parent.id })).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
+    expect(removeStored.mock.calls.map(([sessionId]) => sessionId)).toEqual([
+      'cascade-child',
+      'cascade-grandchild',
+      'cascade-root',
+    ])
+    expect(forget).toHaveBeenCalledWith(child.id)
+    expect(forget).toHaveBeenCalledWith(grandchild.id)
+    expect(forget).not.toHaveBeenCalledWith(fork.id)
+  })
+
+  it('forgets an already-removed subagent descendant instead of failing the parent deletion', async () => {
+    const { ctx, commands, removeStored, forget } = await setup()
+    const parent = ctx.sessions.create(SessionId('cascade-gone-root'))
+    const child = ctx.sessions.create(SessionId('cascade-gone-child'), {
+      meta: { parentSession: parent.id, origin: 'subagent', delegationDepth: 1 },
+    })
+    Object.assign(ctx.sessionPersistence, {
+      list: async () => [{ header: child.header, revision: SessionPersistenceRevision('test:cascade-gone-child') }],
+    })
+    ctx.sessions.remove(child.id)
+    removeStored.mockImplementation(async (sessionId: SessionId) => sessionId !== child.id)
+    await expect(commands.deleteSession({ sessionId: parent.id })).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
+    expect(forget).toHaveBeenCalledWith(child.id)
+    expect(forget).toHaveBeenCalledWith(parent.id)
+  })
+
+  it('cascades live subagents when the stored listing fails', async () => {
+    const { ctx, commands, removeStored } = await setup()
+    const parent = agentFor(ctx, 'fallback-root')
+    await ctx.agents.register(parent)
+    const child = agentFor(ctx, 'fallback-child', { parentSession: parent.id, origin: 'subagent' })
+    await ctx.agents.register(child)
+    Object.assign(ctx.sessionPersistence, {
+      list: async () => { throw new Error('listing failed') },
+    })
+    await expect(commands.deleteSession({ sessionId: parent.id })).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
+    expect(removeStored.mock.calls.map(([sessionId]) => sessionId)).toEqual(['fallback-child', 'fallback-root'])
+  })
+
+  it('visits a damaged subagent lineage loop once', async () => {
+    const { ctx, commands, removeStored } = await setup()
+    const loopA = ctx.sessions.create(SessionId('loop-a'), {
+      meta: { parentSession: SessionId('loop-b'), origin: 'subagent' },
+    })
+    const loopB = ctx.sessions.create(SessionId('loop-b'), {
+      meta: { parentSession: loopA.id, origin: 'subagent' },
+    })
+    await expect(commands.deleteSession({ sessionId: loopA.id })).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
+    expect(removeStored.mock.calls.map(([sessionId]) => sessionId)).toEqual([loopB.id, loopA.id])
   })
 
   it('stops persistent reminders for an archived Session with no live Agent or Session', async () => {

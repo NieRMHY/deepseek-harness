@@ -2,7 +2,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-session-persistence'
+import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import type SessionPersistence from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection-cache'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
@@ -232,8 +233,11 @@ export class WorkspaceCommands {
   }
 
   /**
-   * Permanently delete one Session: its persisted log, projection-cache
-   * checkpoint, every durable registry slot, and its archive-set entry.
+   * Permanently delete one Session and every subagent Session it delegated:
+   * their persisted logs, projection-cache checkpoints, durable registry
+   * slots, and archive-set entries. A fork carries `parentSession` without the
+   * subagent origin and is an independent conversation, so it never follows
+   * its source.
    * Modify by MHY: Session work is stopped through the Workspace providers
    * before a live Session is cancelled, flushed, and detached. A stop or flush
    * failure preserves its stored transcript and registry slots.
@@ -246,8 +250,82 @@ export class WorkspaceCommands {
     if (persistence === undefined) {
       throw new Error('session deletion is unavailable: no session persistence service is composed')
     }
+    // Add by MHY, 2026-10-21：子 agent 是独立 Session（header.parentSession + origin:'subagent'），
+    // 原先只删请求里的那一个 id：父会话删除后，子会话日志仍留在磁盘上，而侧边栏按
+    // origin === 'subagent' 把它们过滤掉，于是变成既看不见、也没有删除入口的孤儿。
+    const descendants = await this.subagentDescendants(sessionId, persistence)
+
     // Modify by MHY, stop providers also own work for cold Sessions; a failed stop must preserve the transcript.
+    // 这一步同时取消仍在运行的后代（subagent 的 archive-admission 监听 workspace/session-stop）。
     await this.ctx.parallel('workspace/session-stop', { sessionId })
+
+    // 子会话先删、父会话最后删：父会话的持久化删除是整棵子树的提交点，
+    // 中途失败时父会话仍在会话列表里，用户可以重试。
+    for (const descendant of descendants) {
+      // 子会话也可能持有自己的提醒和后台任务，走同一条停止路径。
+      await this.ctx.parallel('workspace/session-stop', { sessionId: descendant })
+      await this.deleteStoredSession(descendant, persistence, false)
+    }
+    await this.deleteStoredSession(sessionId, persistence, true)
+    return {
+      deleted: true,
+      archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds],
+    }
+  }
+
+  /**
+   * Every subagent Session delegated by `rootId`, at any depth, read from
+   * stored headers plus live Agents. A damaged unrelated Session only narrows
+   * the search to live descendants; it never blocks deleting `rootId`.
+   * @param rootId - Session whose subagent subtree is collected.
+   * @param persistence - stored-session source for cold descendants.
+   * @returns descendant ids, each parent before its own descendants.
+   */
+  private async subagentDescendants(rootId: SessionId, persistence: SessionPersistence): Promise<SessionId[]> {
+    const headers: SessionHeader[] = this.ctx.sessions.list().map(session => session.header)
+    for (const agent of this.ctx.agents.list()) headers.push(agent.session.header)
+    try {
+      for (const snapshot of await persistence.list()) headers.push(snapshot.header)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`session deletion: listing stored Sessions failed, only live subagents cascade: ${String(error)}`)
+    }
+    const childrenOf = new Map<SessionId, SessionId[]>()
+    for (const header of headers) {
+      const { parentSession, origin } = header
+      if (parentSession === undefined || origin !== 'subagent') continue
+      const siblings = childrenOf.get(parentSession) ?? []
+      siblings.push(header.id)
+      childrenOf.set(parentSession, siblings)
+    }
+    const descendants: SessionId[] = []
+    const visited = new Set<SessionId>([rootId])
+    const pending: SessionId[] = [rootId]
+    while (pending.length > 0) {
+      const parentId = pending.shift() as SessionId
+      for (const childId of childrenOf.get(parentId) ?? []) {
+        if (visited.has(childId)) continue
+        visited.add(childId)
+        descendants.push(childId)
+        pending.push(childId)
+      }
+    }
+    return descendants
+  }
+
+  /**
+   * Delete one Session's durable data after its work has stopped: detach a
+   * live Session, remove its transcript, then forget its registry and cache
+   * slots. A subagent descendant whose transcript is already gone is only
+   * forgotten, so an earlier or concurrent removal stays idempotent.
+   * @param sessionId - Session to delete.
+   * @param persistence - persistence service owning the transcript.
+   * @param required - whether a missing transcript is an error.
+   */
+  private async deleteStoredSession(
+    sessionId: SessionId,
+    persistence: SessionPersistence,
+    required: boolean,
+  ): Promise<void> {
     const liveSession = this.ctx.sessions.get(sessionId)
     if (liveSession !== undefined) {
       const agent = this.ctx.agents.get(sessionId)
@@ -266,7 +344,7 @@ export class WorkspaceCommands {
     // sessionVisible(!archived) 判定，会话就"跑到未归档里去了"——用户报告的
     // 正是这个现象。只有确实删除成功才解除归档；否则如实报错。
     const removed = await persistence.delete(sessionId)
-    if (!removed) {
+    if (!removed && required) {
       throw new RemoteError(
         'session/not-found',
         `session "${sessionId}" has no stored transcript to delete`,
@@ -280,10 +358,6 @@ export class WorkspaceCommands {
     // Modify by MHY, 2026-09-11
     await this.ctx.workspaceRegistry.forgetSession(sessionId)
     await this.ctx.get('sessionProjectionCache')?.forget(sessionId)
-    return {
-      deleted: true,
-      archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds],
-    }
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {

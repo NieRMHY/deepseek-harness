@@ -90,7 +90,7 @@ export const zh = {
   'archive.confirm.pending': '正在停止并归档…',
   // Add by MHY, 2026-09-24：fork 独有的彻底删除对话框。
   'delete.confirm.title': '彻底删除此会话？',
-  'delete.confirm.desc': '“{title}”的会话日志、投影检查点、工作区分组记录与归档记录都会被永久删除，无法恢复。此操作不可撤销。',
+  'delete.confirm.desc': '“{title}”的会话日志、投影检查点、工作区分组记录与归档记录都会被永久删除，由它派生的子智能体会话一并删除，无法恢复。此操作不可撤销。',
   'delete.confirm.action': '彻底删除',
   'delete.confirm.warning': '此操作会永久删除该会话的全部磁盘记录，且没有撤销入口。',
   'delete.confirm.pending': '正在删除…',
@@ -222,7 +222,7 @@ export const en = {
   'archive.confirm.action': 'Stop and archive',
   'archive.confirm.pending': 'Stopping and archiving…',
   'delete.confirm.title': 'Delete this session permanently?',
-  'delete.confirm.desc': 'The session log, projection checkpoint, workspace accounting and archive record for “{title}” are removed for good. This cannot be undone.',
+  'delete.confirm.desc': 'The session log, projection checkpoint, workspace accounting and archive record for “{title}” are removed for good, together with every subagent session it delegated. This cannot be undone.',
   'delete.confirm.action': 'Delete permanently',
   'delete.confirm.warning': 'This permanently removes every stored record of the session. There is no undo.',
   'delete.confirm.pending': 'Deleting…',
