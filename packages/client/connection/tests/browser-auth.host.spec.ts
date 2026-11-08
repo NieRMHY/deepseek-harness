@@ -160,6 +160,24 @@ describe('API credentials', () => {
 })
 
 describe('BrowserAuth', () => {
+  // Add by MHY: browser opt-out must not manufacture or publish API operator credentials.
+  it('bypasses browser authentication over HTTP and TLS while retaining API credential checks', async () => {
+    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30, true)
+    expect(auth.authenticatedUrl('https://localhost:3081/connect?interactions=answer#fragment'))
+      .toBe('https://localhost:3081/')
+    for (const secure of [false, true]) {
+      const res = response()
+      expect(auth.authorizeIndex(request('/?token=invalid'), res.value, secure)).toBe(true)
+      expect(res.state).toEqual({})
+      expect(auth.isAuthenticated(request('/'), secure)).toBe(true)
+      expect(auth.authenticateApi(request('/'), secure)).toBeUndefined()
+      const publish = vi.fn(() => 'api-operator' as PeerId)
+      auth.authorizeConnect(request('/connect?interactions=answer'), res.value, secure, publish)
+      expect(res.state.status).toBe(401)
+      expect(publish).not.toHaveBeenCalled()
+    }
+  })
+
   it('mints one process token and a persistent authority-bound cookie', async () => {
     const store = new RecordCredentials()
     const processOwner = {}

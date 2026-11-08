@@ -202,6 +202,8 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
  * Process launch-token exchange and persistent signed-cookie verification.
  * Connection loads the credential provider's signing secret during activation
  * and retains it for synchronous request authentication.
+ * Modify by MHY: `disabled` mode bypasses browser authentication; API credential
+ * verification and the carrier's Host/Origin fence remain active.
  */
 export class BrowserAuth {
   private readonly launchToken: string
@@ -211,6 +213,7 @@ export class BrowserAuth {
     processOwner: object,
     private readonly secret: Buffer,
     maxAgeDays: number,
+    private readonly disabled = false,
   ) {
     this.launchToken = processLaunchToken(processOwner)
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
@@ -226,23 +229,32 @@ export class BrowserAuth {
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+   * @param disabled - bypass browser authentication when true; false requires token/cookie exchange.
    * @returns initialized authentication owner with the process owner's launch token.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
+    disabled = false,
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, disabled)
   }
 
   /**
    * Add this process's launch token to the caller's application URL.
    * @param baseUrl - clean browser URL whose authority and mount are preserved.
-   * @returns the same URL carrying the process token as its sole authentication input.
+   * @returns the same URL carrying the process token, or a clean root URL when browser authentication is disabled.
    */
   authenticatedUrl(baseUrl: string): string {
     const url = new URL(baseUrl)
+    // Modify by MHY: only browser auth opt-out uses a clean root; API connect URLs retain their mount and declarations.
+    if (this.disabled) {
+      url.pathname = '/'
+      url.search = ''
+      url.hash = ''
+      return url.href
+    }
     url.searchParams.set(TOKEN_QUERY, this.launchToken)
     return url.href
   }
@@ -258,9 +270,11 @@ export class BrowserAuth {
    * minted cookie carries `Secure` when it does. Only that listener's own
    * protocol decides, never a `publicUrl` announcement or a forwarded header:
    * those describe a hop this process does not terminate.
-   * @returns true only when the caller may serve index.html.
+   * @returns true when browser authentication is disabled or the caller may serve an authenticated index.html.
    */
   authorizeIndex(req: ConnectionIndexRequest, res: ConnectionIndexResponse, secure = false): boolean {
+    // Add by MHY: disabled auth serves the index without any check.
+    if (this.disabled) return true
     /* v8 ignore next -- node:http always supplies url on server requests. */
     const url = new URL(req.url ?? '/', 'http://dsh.invalid')
     const tokens = url.searchParams.getAll(TOKEN_QUERY)
@@ -351,9 +365,11 @@ export class BrowserAuth {
    * Verify the authority-bound browser cookie on a Host request.
    * @param request - request headers carrying Host and Cookie.
    * @param secure - whether the receiving listener uses TLS, including its default port.
-   * @returns true only for an unexpired cookie signed by this activation's loaded secret.
+   * @returns true when browser authentication is disabled or an unexpired browser cookie verifies with this activation's loaded secret.
    */
   isAuthenticated(request: ConnectionTrustRequest, secure = false): boolean {
+    // Modify by MHY: browser auth opt-out still enters through the carrier's Host/Origin fence.
+    if (this.disabled) return true
     return this.authenticate(request, secure)?.version === COOKIE_PAYLOAD_VERSION
   }
 

@@ -140,6 +140,23 @@ function browserCookie(connection: HostConnectionHandle, authority: string): str
 }
 
 describe('connection node half', () => {
+  // Add by MHY: opting out of browser cookies still uses upstream Peer admission and the Host/Origin fence.
+  it('admits browser requests without cookies when authDisabled while preserving trust checks', async () => {
+    const { connection, dispose } = await mounted({ authDisabled: true }, 'https:')
+    try {
+      const req = fakeRequest({ host: '127.0.0.1:3081', origin: 'https://127.0.0.1:3081' })
+      const res = fakeResponse()
+      expect(connection.authorizeIndex(req, res.response)).toBe(true)
+      expect(res.state).toEqual({})
+      expect(connection.requestRejection(req)).toBeUndefined()
+      expect(connection.requestRejection(fakeRequest({ host: 'attacker.test' }))).toBe(403)
+      expect(connection.requestRejection(fakeRequest({ host: '127.0.0.1:3081', origin: 'https://attacker.test' }))).toBe(403)
+      expect(connection.requestRejection(fakeRequest({ host: '127.0.0.1:3081', 'sec-fetch-site': 'cross-site' }))).toBe(403)
+    } finally {
+      await dispose()
+    }
+  })
+
   it('runs request admission after authentication and removes it with its owning fiber', async () => {
     const { ctx, routes, connection, dispose } = await mounted()
     let admitted = 0
