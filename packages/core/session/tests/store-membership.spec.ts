@@ -103,6 +103,27 @@ describe('Session store membership', () => {
     expect(observed).toEqual(committed)
   })
 
+  // Add by MHY, deletion must preserve creation publication before paired disposal.
+  it('defers removal until synchronous creation listeners complete', () => {
+    const id = SessionId('remove-during-creation')
+    const order: string[] = []
+    ctx.on('session/created', (session) => {
+      order.push('created-first')
+      expect(ctx.sessions.remove(id)).toBe(true)
+      expect(ctx.sessions.get(id)).toBe(session)
+    })
+    ctx.on('session/created', (session) => {
+      order.push('created-second')
+      expect(ctx.sessions.get(id)).toBe(session)
+    })
+    ctx.on('session/disposed', () => { order.push('disposed') })
+    const session = ctx.sessions.create(id)
+    expect(order).toEqual(['created-first', 'created-second', 'disposed'])
+    expect(ctx.sessions.get(id)).toBeUndefined()
+    expect(ctx.sessions.remove(id)).toBe(false)
+    expect(() => session.append('turn/start', { turn: 1 })).toThrow('outside a SessionStore')
+  })
+
   it('keeps writes disabled after a failed announcement', () => {
     const session = ctx.sessions.prepare(SessionId('failed-announcement'))
     ctx.effect(() => ctx.sessions.enter(session))

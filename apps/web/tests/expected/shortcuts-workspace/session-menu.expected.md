@@ -5,5 +5,6 @@
   - separator
   - menuitem "Copy Session ID"
   - menuitem "Show in Finder"
+  - menuitem "Delete session"
   - separator
   - menuitem "Archive session"

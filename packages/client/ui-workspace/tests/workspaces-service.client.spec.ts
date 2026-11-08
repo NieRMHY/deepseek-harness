@@ -234,6 +234,19 @@ class FakeWorkspaces implements IWorkspaces {
       pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
     }))
   }
+
+  readonly deleteCalls: SessionId[] = []
+
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    this.deleteCalls.push(sessionId)
+    this.list.update(state => ({
+      ...state,
+      archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+      items: state.items.map(workspace => workspace.sessionIds.includes(sessionId)
+        ? { ...workspace, sessionIds: workspace.sessionIds.filter(id => id !== sessionId) }
+        : workspace),
+    }))
+  }
 }
 
 const listing: DirectoryListing = {

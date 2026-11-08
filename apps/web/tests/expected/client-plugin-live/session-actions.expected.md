@@ -7,5 +7,6 @@
   - separator
   - menuitem "Export session"
   - menuitem "Copy session ID"
+  - menuitem "Delete session"
   - separator
   - menuitem "Archive session"

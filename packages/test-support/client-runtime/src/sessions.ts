@@ -648,6 +648,7 @@ export class TestSessions implements ISessions {
   refresh(): Promise<void> {
     this.calls.push({ method: 'refresh', args: [] })
     return Promise.resolve()
+
   }
 
   /**

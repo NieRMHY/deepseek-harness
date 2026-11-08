@@ -667,6 +667,7 @@ export class SessionManager {
   }
 
   /**
+
    * Apply one Session-list addition forwarded through `ctx.remote.$on`.
    * @param summary - current Host summary for the added Session.
    */

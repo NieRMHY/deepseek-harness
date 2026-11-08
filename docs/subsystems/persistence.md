@@ -371,6 +371,19 @@ Freshness: once an `append` or `flush` resolves, reads started afterwards on thi
 abstract create(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle>
 
 /**
+ * Durably delete one persisted session and every backend-owned artifact it
+ * materialized. Backends without a deletion primitive keep the default
+ * rejection so callers can distinguish unsupported storage from an absent
+ * session.
+ * @param _id - the persisted session to delete (unused by the default).
+ * @param signal - optional cancellation for backend delete work.
+ * @returns `true` when a materialized session existed and was deleted,
+ *   `false` when no such session was materialized.
+ * @throws when this backend does not support session deletion.
+ */
+delete(_id: SessionId, signal?: AbortSignal): Promise<boolean>
+
+/**
  * Open an existing stored session.
  *
  * `read` never takes ownership and works while another handle (or process)

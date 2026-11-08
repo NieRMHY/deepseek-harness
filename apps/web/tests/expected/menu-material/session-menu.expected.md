@@ -4,5 +4,6 @@
   - menuitem "Fork session"
   - separator
   - menuitem "Copy Session ID"
+  - menuitem "Delete session"
   - separator
   - menuitem "Archive session"

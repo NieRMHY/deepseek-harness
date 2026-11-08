@@ -16,6 +16,8 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
+  WorkspaceDeleteSessionRequest,
+  WorkspaceDeleteSessionValue,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
   WorkspaceId,
@@ -53,7 +55,8 @@ declare module '@deepseek-ai/cordis' {
 
 /** Host service backing the generated `ctx.remote.workspace` namespace. */
 export class WorkspaceController extends TypertRemoteService {
-  static inject = ['remoteAccess', 'typert', 'workspaceRegistry']
+  // Modify by MHY: retain deletion dependencies alongside upstream access filtering.
+  static inject = ['remoteAccess', 'typert', 'workspaceRegistry', 'sessions', 'agents', 'sessionPersistence', 'sessionProjectionCache']
 
   static Config: z<Config, ResolvedConfig> = z.object({
     documentsDirectory: z.string(),
@@ -189,6 +192,19 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('unpinSession')
   unpinSession(request: WorkspaceUnpinSessionRequest): Promise<WorkspacePinValue> {
     return this.commands.unpinSession(request)
+  }
+
+  // Add by MHY: upstream still has no permanent Session deletion endpoint.
+  /**
+   * Permanently delete one Session and every subagent Session it delegated:
+   * their logs, projections, accounting, and archive entries. A fork shares
+   * `parentSession` but is an independent conversation and is kept.
+   * @param request - Session identity to delete.
+   * @returns deletion receipt plus the complete updated archive set.
+   */
+  @Remote('deleteSession')
+  deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue> {
+    return this.commands.deleteSession(request)
   }
 
   /**

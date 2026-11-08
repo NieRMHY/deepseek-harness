@@ -158,6 +158,25 @@ export abstract class SessionPersistence extends Service {
    */
   abstract create(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle>
 
+  // Add by MHY: fork 独有，上游 0.1.5 无会话删除原语
+  /**
+   * Durably delete one persisted session and every backend-owned artifact it
+   * materialized. Backends without a deletion primitive keep the default
+   * rejection so callers can distinguish unsupported storage from an absent
+   * session.
+   * @param _id - the persisted session to delete (unused by the default).
+   * @param signal - optional cancellation for backend delete work.
+   * @returns `true` when a materialized session existed and was deleted,
+   *   `false` when no such session was materialized.
+   * @throws when this backend does not support session deletion.
+   */
+  delete(_id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'))
+    }
+    return Promise.reject(new Error('this session persistence backend does not support session deletion'))
+  }
+
   /**
    * Open an existing stored session.
    *

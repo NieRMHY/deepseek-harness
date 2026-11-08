@@ -387,6 +387,15 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('unpinSession') unpinSession(request: WorkspaceUnpinSessionRequest): Promise<WorkspacePinValue>
 
 /**
+ * Permanently delete one Session and every subagent Session it delegated:
+ * their logs, projections, accounting, and archive entries. A fork shares
+ * `parentSession` but is an independent conversation and is kept.
+ * @param request - Session identity to delete.
+ * @returns deletion receipt plus the complete updated archive set.
+ */
+@Remote('deleteSession') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue>
+
+/**
  * Stream a complete Workspace baseline followed by ordered increments. A
  * non-owner receives only the Workspaces and Sessions `allows()` admits.
  * When a delivered Workspace is no longer admitted at its next change or
@@ -580,6 +589,16 @@ pinSession(sessionId: SessionId): Promise<void>
 unpinSession(sessionId: SessionId): Promise<void>
 
 /**
+ * Remove one session from every durable registry slot: each workspace
+ * account, the archive and pin sets, and the in-memory header index. The session log
+ * itself belongs to `sessionPersistence.delete`, so the caller owns that
+ * step; this method only stops the registry from naming the session again.
+ * @param sessionId - the deleted session to forget.
+ * @returns resolution after durability.
+ */
+forgetSession(sessionId: SessionId): Promise<void>
+
+/**
  * Resolve by canonical directory path without creating or mutating a
  * workspace. A missing path rejects during `realpath`; an existing unowned
  * directory returns `undefined`.
@@ -616,6 +635,29 @@ Ask the composed providers what still runs for a session before it is archived. 
  */
 'workspace/session-activity'( request: SessionActivityRequest, next: () => Promise<readonly SessionActivity[]>, ): Promise<readonly SessionActivity[]>
 ```
+
+Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
+
+<a id="workspacesession-forgotten--emit"></a>
+
+#### `workspace/session-forgotten` — emit
+
+The registry dropped every durable slot for one Session, typically because the Session was deleted. Session list consumers that mirror the registry need this to drop a row that never had a live Session behind it (an archived or long-closed entry), which `session/disposed` never reports.
+
+```ts cordis-catalog
+/**
+ * The registry dropped every durable slot for one Session, typically
+ * because the Session was deleted. Session list consumers that mirror the
+ * registry need this to drop a row that never had a live Session behind it
+ * (an archived or long-closed entry), which `session/disposed` never
+ * reports.
+ * @mode emit
+ * @param sessionId - the forgotten Session identity.
+ */
+'workspace/session-forgotten'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.zh.md)
 
 Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
 

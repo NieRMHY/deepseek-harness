@@ -1265,6 +1265,20 @@ describe('registry-global session unarchive', () => {
 })
 
 describe('registry-global session pin', () => {
+  // Add by MHY, 新增置顶状态不能留下已彻底删除会话的引用。
+  it('forgets a deleted pinned session durably without clearing another pin', async () => {
+    const dir = await makeDir('pin-forget')
+    const result = await harness({ sessions: [header('deleted', dir, 100), header('kept', dir, 200)] })
+    await result.registry.pinSession(SessionId('deleted'))
+    await result.registry.pinSession(SessionId('kept'))
+
+    await result.registry.forgetSession(SessionId('deleted'))
+
+    expect(result.registry.pinnedSessionIds).toEqual(['kept'])
+    expect(storedState(result.pool).pinnedSessionIds).toEqual(['kept'])
+    expect(result.registry.list()[0]!.sessionIds).not.toContain('deleted')
+  })
+
   it('pins durably in prepend order, idempotently skips repeats, and leaves accounting untouched', async () => {
     const dir = await makeDir('pin-home')
     const result = await harness({ sessions: [header('first', dir, 100), header('second', dir, 200)] })

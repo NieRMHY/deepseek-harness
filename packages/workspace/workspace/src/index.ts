@@ -145,6 +145,16 @@ declare module '@deepseek-ai/cordis' {
      * @mode parallel
      */
     'workspace/session-stop'(request: SessionActivityRequest): Promise<void> | void
+    /**
+     * The registry dropped every durable slot for one Session, typically
+     * because the Session was deleted. Session list consumers that mirror the
+     * registry need this to drop a row that never had a live Session behind it
+     * (an archived or long-closed entry), which `session/disposed` never
+     * reports.
+     * @mode emit
+     * @param sessionId - the forgotten Session identity.
+     */
+    'workspace/session-forgotten'(sessionId: SessionId): void
   }
 }
 
@@ -462,6 +472,40 @@ export class WorkspaceRegistry extends Service {
         ...state,
         pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
       })
+    })
+  }
+
+  /**
+   * Remove one session from every durable registry slot: each workspace
+   * account, the archive and pin sets, and the in-memory header index. The session log
+   * itself belongs to `sessionPersistence.delete`, so the caller owns that
+   * step; this method only stops the registry from naming the session again.
+   * @param sessionId - the deleted session to forget.
+   * @returns resolution after durability.
+   */
+  forgetSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      const state = this.requireState()
+      for (const entity of this.entities.values()) {
+        await entity.detachSession(sessionId)
+      }
+      this.headers.delete(sessionId)
+      this.sessionPaths.delete(sessionId)
+      this.invalidSessionPaths.delete(sessionId)
+      // Modify by MHY, 彻底删除也必须清掉新版持久化置顶记录。
+      if (state.archivedSessionIds.includes(sessionId) || state.pinnedSessionIds.includes(sessionId)) {
+        await this.setState({
+          ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+          pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
+        })
+      }
+      // Add by MHY, 2026-09-11：广播"该会话已从注册表消失"。
+      // 已归档 / 久未打开的会话不在 live registry 里，删除它们时
+      // session/disposed 不会触发，客户端因此收不到 api-session/removed，
+      // 列表里仍留着这一行；workspace 侧按 !archived 判定，就把它渲染进
+      // 「未分组」。此事件让 session-controller 补发一次移除通知。
+      this.ctx.emit('workspace/session-forgotten', sessionId)
     })
   }
 

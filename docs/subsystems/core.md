@@ -817,6 +817,15 @@ register(agent: Agent): ReturnType<Context['effect']>
 enter(agent: Agent, owner: Agent | undefined): () => void
 
 /**
+ * Remove one live agent from the registry by id, following the same
+ * announcement-deferral rule as {@link enter}. Session deletion is the
+ * only caller; it owns stopping and flushing the agent's session first.
+ * @param sessionId - the agent id (shared with its session) to remove.
+ * @returns `true` when a live entry existed, `false` when the id was absent.
+ */
+remove(sessionId: SessionId): boolean
+
+/**
  * Announce an agent previously inserted with {@link enter}.
  * @param agent - the live inserted agent to announce.
  * @param source - fresh creation, resume, clear, or compaction source.

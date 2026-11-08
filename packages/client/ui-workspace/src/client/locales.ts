@@ -63,6 +63,8 @@ export const zh = {
   'menu.unarchiveSession': '取消归档',
   'menu.pinSession': '置顶会话',
   'menu.unpinSession': '取消置顶',
+  // Modify by MHY: keep permanent deletion alongside upstream copy-ID messages.
+  'menu.deleteSession': '删除会话（彻底）',
   'menu.sessionId': '复制 Session ID',
   'toast.sessionIdCopied': 'Session ID 已复制',
   'toast.sessionIdCopyFailed': '复制失败，请重试',
@@ -86,6 +88,12 @@ export const zh = {
   'archive.confirm.listSeparator': '、',
   'archive.confirm.action': '停止并归档',
   'archive.confirm.pending': '正在停止并归档…',
+  // Add by MHY, 2026-09-24：fork 独有的彻底删除对话框。
+  'delete.confirm.title': '彻底删除此会话？',
+  'delete.confirm.desc': '“{title}”的会话日志、投影检查点、工作区分组记录与归档记录都会被永久删除，由它派生的子智能体会话一并删除，无法恢复。此操作不可撤销。',
+  'delete.confirm.action': '彻底删除',
+  'delete.confirm.warning': '此操作会永久删除该会话的全部磁盘记录，且没有撤销入口。',
+  'delete.confirm.pending': '正在删除…',
   'toast.archivedUndo': '撤销',
   'toast.archivedOr': '或',
   'toast.archivedFilter': '筛选已归档会话',
@@ -189,6 +197,7 @@ export const en = {
   'menu.unarchiveSession': 'Unarchive session',
   'menu.pinSession': 'Pin session',
   'menu.unpinSession': 'Unpin session',
+  'menu.deleteSession': 'Delete session',
   'menu.sessionId': 'Copy Session ID',
   'toast.sessionIdCopied': 'Session ID copied',
   'toast.sessionIdCopyFailed': 'Copy failed. Try again.',
@@ -212,6 +221,11 @@ export const en = {
   'archive.confirm.listSeparator': ', ',
   'archive.confirm.action': 'Stop and archive',
   'archive.confirm.pending': 'Stopping and archiving…',
+  'delete.confirm.title': 'Delete this session permanently?',
+  'delete.confirm.desc': 'The session log, projection checkpoint, workspace accounting and archive record for “{title}” are removed for good, together with every subagent session it delegated. This cannot be undone.',
+  'delete.confirm.action': 'Delete permanently',
+  'delete.confirm.warning': 'This permanently removes every stored record of the session. There is no undo.',
+  'delete.confirm.pending': 'Deleting…',
   'toast.archivedUndo': 'undo',
   'toast.archivedOr': ' or ',
   'toast.archivedFilter': 'filter archived sessions',
@@ -255,6 +269,13 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'セッションを完全に削除',
+  'delete.confirm.title': 'このセッションを完全に削除しますか？',
+  'delete.confirm.desc': '「{title}」のセッションログ、投影チェックポイント、ワークスペースとアーカイブの記録、および委任したすべてのサブエージェントのセッションを永久に削除します。この操作は取り消せません。',
+  'delete.confirm.action': '完全に削除',
+  'delete.confirm.warning': '保存済みのセッション記録を永久に削除します。取り消しはできません。',
+  'delete.confirm.pending': '削除中…',
   'defaultWorkspace.failed': 'デフォルトのワークスペースを作成できません。ワークスペースを選択してフォルダーを選んでください。',
   'draft.workspaceRequired': '先にワークスペースを選択してください。',
   'draft.initializationFailed': '下書きを埋め込めませんでした。しばらくしてからもう一度お試しください。',
@@ -378,6 +399,13 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'Eliminar sesión',
+  'delete.confirm.title': '¿Eliminar esta sesión permanentemente?',
+  'delete.confirm.desc': 'Se eliminarán permanentemente el registro de la sesión «{title}», sus puntos de control, sus registros de espacio de trabajo y archivo y todas las sesiones de subagentes que delegó. Esta acción es irreversible.',
+  'delete.confirm.action': 'Eliminar permanentemente',
+  'delete.confirm.warning': 'Los registros guardados de esta sesión se eliminarán permanentemente. Esta acción es irreversible.',
+  'delete.confirm.pending': 'Eliminando…',
   'defaultWorkspace.failed': 'No se puede crear el espacio de trabajo predeterminado. Utilice Elegir espacio de trabajo para seleccionar una carpeta.',
   'draft.workspaceRequired': 'Elija un espacio de trabajo primero.',
   'draft.initializationFailed': 'No se pudo completar el borrador. Inténtelo de nuevo en breve.',
@@ -501,6 +529,13 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'Supprimer la session',
+  'delete.confirm.title': 'Supprimer définitivement cette session ?',
+  'delete.confirm.desc': 'Le journal de la session « {title} », ses points de contrôle, ses entrées dans les espaces de travail et les archives ainsi que toutes les sessions de sous-agents délégués seront supprimés définitivement. Cette action est irréversible.',
+  'delete.confirm.action': 'Supprimer définitivement',
+  'delete.confirm.warning': 'Les données enregistrées de cette session seront supprimées définitivement. Cette action est irréversible.',
+  'delete.confirm.pending': 'Suppression…',
   'defaultWorkspace.failed': 'Impossible de créer un espace de travail par défaut. Utilisez Choisir un espace de travail pour sélectionner un dossier.',
   'draft.workspaceRequired': "Choisissez d'abord un espace de travail.",
   'draft.initializationFailed': 'Impossible de remplir le projet. Veuillez réessayer sous peu.',
@@ -624,6 +659,13 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'Sitzung löschen',
+  'delete.confirm.title': 'Diese Sitzung dauerhaft löschen?',
+  'delete.confirm.desc': 'Das Protokoll der Sitzung „{title}“, ihre Projektionsprüfpunkte, Arbeitsbereichs- und Archiveinträge sowie alle delegierten Unteragentensitzungen werden dauerhaft gelöscht. Dies lässt sich nicht rückgängig machen.',
+  'delete.confirm.action': 'Dauerhaft löschen',
+  'delete.confirm.warning': 'Die gespeicherten Aufzeichnungen dieser Sitzung werden dauerhaft gelöscht. Dies lässt sich nicht rückgängig machen.',
+  'delete.confirm.pending': 'Wird gelöscht…',
   'defaultWorkspace.failed': 'Der Standardarbeitsbereich kann nicht erstellt werden. Verwenden Sie „Arbeitsbereich auswählen“, um einen Ordner auszuwählen.',
   'draft.workspaceRequired': 'Wählen Sie zunächst einen Arbeitsbereich.',
   'draft.initializationFailed': 'Der Entwurf konnte nicht ausgefüllt werden. Bitte versuchen Sie es in Kürze noch einmal.',
@@ -747,6 +789,13 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'Удалить сеанс',
+  'delete.confirm.title': 'Удалить этот сеанс навсегда?',
+  'delete.confirm.desc': 'Журнал сеанса «{title}», контрольные точки проекций, записи рабочего пространства и архива, а также все делегированные сеансы субагентов будут удалены навсегда. Это действие необратимо.',
+  'delete.confirm.action': 'Удалить навсегда',
+  'delete.confirm.warning': 'Сохранённые записи этого сеанса будут удалены навсегда. Отменить это действие нельзя.',
+  'delete.confirm.pending': 'Удаление…',
   'defaultWorkspace.failed': 'Невозможно создать рабочую область по умолчанию. Используйте «Выбрать рабочее пространство», чтобы выбрать папку.',
   'draft.workspaceRequired': 'Сначала выберите рабочее место.',
   'draft.initializationFailed': 'Не удалось заполнить черновик. Пожалуйста, повторите попытку в ближайшее время.',
@@ -870,6 +919,13 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  // Add by MHY, include permanent deletion in the upstream locale contract.
+  'menu.deleteSession': 'Excluir sessão',
+  'delete.confirm.title': 'Excluir esta sessão permanentemente?',
+  'delete.confirm.desc': 'O registro da sessão “{title}”, seus pontos de controle, os registros de espaço de trabalho e arquivo e todas as sessões de subagentes delegadas serão excluídos permanentemente. Esta ação é irreversível.',
+  'delete.confirm.action': 'Excluir permanentemente',
+  'delete.confirm.warning': 'Os registros armazenados desta sessão serão excluídos permanentemente. Esta ação é irreversível.',
+  'delete.confirm.pending': 'Excluindo…',
   'defaultWorkspace.failed': 'Não foi possível criar o espaço de trabalho padrão. Use Escolher espaço de trabalho para selecionar uma pasta.',
   'draft.workspaceRequired': 'Escolha um espaço de trabalho primeiro.',
   'draft.initializationFailed': 'Não foi possível preencher o rascunho. Por favor, tente novamente em breve.',

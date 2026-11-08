@@ -129,6 +129,11 @@ export interface WorkspaceUnarchiveSessionRequest {
   readonly sessionId: SessionId
 }
 
+/** Session requested for permanent deletion (log, projection, accounting). */
+export interface WorkspaceDeleteSessionRequest {
+  readonly sessionId: SessionId
+}
+
 /** Complete archived Session set after a mutation. */
 export interface WorkspaceArchiveValue {
   readonly archivedSessionIds: readonly SessionId[]
@@ -147,6 +152,12 @@ export interface WorkspaceUnpinSessionRequest {
 /** Complete pinned Session set after a mutation, most recently pinned first. */
 export interface WorkspacePinValue {
   readonly pinnedSessionIds: readonly SessionId[]
+}
+
+/** Deletion receipt plus the complete updated archive set. */
+export interface WorkspaceDeleteSessionValue {
+  readonly deleted: true
+  readonly archivedSessionIds: readonly SessionId[]
 }
 
 /** Complete reconnect baseline for Workspace browser state. */

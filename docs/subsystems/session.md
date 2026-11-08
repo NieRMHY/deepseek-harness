@@ -1165,6 +1165,15 @@ prepare(id?: SessionId, options?: PrepareSessionOptions): Session
  */
 enter(session: Session): () => void
 
+/**
+ * Remove one live session from the store by id, following the same
+ * publication-deferral rule as the enter() detach capability. The caller
+ * owns flushing and stopping the session's agent first.
+ * @param sessionId - the live session to remove.
+ * @returns `true` when a live entry existed, `false` when the id was absent.
+ */
+remove(sessionId: SessionId): boolean
+
 /** Emit `session/created` exactly once for an {@link enter}ed session (with
  * the carrier {@link enter} captured). Separate from {@link enter} so the
  * caller can yield the detach disposer first (rollback safety — see

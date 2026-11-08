@@ -103,6 +103,11 @@ export class JsonlSessionHandle implements SessionHandle {
     private lease?: SessionWriteLease,
   ) {}
 
+  /** Add by MHY: settlement of an owner-started close; absent while the writer is live. */
+  get closingPromise(): Promise<void> | undefined {
+    return this.closing
+  }
+
   /** Exact fork-inherited prefix length stored with this session's log. */
   get inheritedEventCount(): SessionLogOffset {
     return this.state.inheritedEventCount
@@ -429,6 +434,20 @@ export class JsonlBackendTracker {
   claimWrite(id: SessionId): void {
     if (this.writers.has(id)) throw new SessionAlreadyOwnedError(id)
     this.writers.set(id, null)
+  }
+
+  /**
+   * Add by MHY: join an owner-started close before claiming deletion.
+   * @param id - the session whose generations will be deleted.
+   * @throws {SessionAlreadyOwnedError} while a live writer or constructing claim remains.
+   */
+  async claimDelete(id: SessionId): Promise<void> {
+    const writer = this.writers.get(id)
+    if (writer !== null && writer !== undefined) {
+      const closing = writer.closingPromise
+      if (closing !== undefined) await closing
+    }
+    this.claimWrite(id)
   }
 
   /**

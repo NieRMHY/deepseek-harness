@@ -14,7 +14,8 @@ import {
   sessionFormatCatalog,
 } from '@deepseek-ai/dsh-session-format-catalog'
 import { readdirSync, type Dirent } from 'node:fs'
-import { open, mkdir, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+// Add by MHY: fork 独有，上游 0.1.5 无会话删除原语（delete 需要 rmdir 收尾）
+import { open, mkdir, readdir, realpath, link, rm, rmdir, stat, truncate } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -210,6 +211,12 @@ function fileRevision(identity: JsonlPhysicalIdentity): PersistenceRevision {
 /** Whether a filesystem error means absence; every non-ENOENT failure must surface. */
 function isENOENT(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+}
+
+/** Add by MHY: permanent deletion may leave non-log artifacts in the directory. */
+function isNotEmptyError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'ENOTEMPTY' || code === 'EEXIST'
 }
 
 /**
@@ -461,6 +468,70 @@ class JsonlSessionPersistence extends SessionPersistence {
         throw new AggregateError([failure, releaseFailure], `session "${id}": write open failed and its lock release failed`)
       }
       throw failure
+    }
+  }
+
+  // Add by MHY: fork 独有，上游 0.1.5 无会话删除原语
+  /**
+   * Delete every materialized generation of one transcript and, when that
+   * leaves the session directory empty, the directory itself. Attachments and
+   * other session-owned artifacts keep the directory non-empty, so this never
+   * removes a file it did not write.
+   *
+   * Every canonical generation goes, not just the highest: the format catalog
+   * publishes a successor beside its predecessor and never removes the source,
+   * so one directory can hold vN and vN+1 at once. Leaving the predecessor
+   * behind would make the Session reappear under the next listing — the
+   * resolver picks the highest canonical generation, and a lower one is still
+   * a readable Session. Active writers retain ownership; deletion only waits
+   * for a close their owner has already started, then takes the same write lease.
+   *
+   * @param id - the persisted session to delete.
+   * @param signal - optional cancellation for the lookup and unlink work.
+   * @returns `true` when a materialized transcript existed and was deleted,
+   *   `false` when the session never materialized.
+   * @throws {SessionAlreadyOwnedError} while a live local or external writer owns the session.
+   * @throws when an owner-started close fails, before any generation is removed.
+   */
+  override async delete(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted()
+    // Modify by MHY, 首次异步等待前观察已开始的关闭，不关闭活 writer 或抢占租约。
+    await this.tracker.claimDelete(id)
+    let lease: SessionWriteLease | undefined
+    try {
+      await this.ensureRootEncoding()
+      signal?.throwIfAborted()
+      const resolved = await this.findLog(id, signal)
+      if (resolved === undefined) return false
+      signal?.throwIfAborted()
+      const dir = dirname(resolved.sourcePath)
+      lease = await this.acquireLease(id, undefined, dir)
+      signal?.throwIfAborted()
+      // Add by MHY, 锁前观察仅用于定位；持有独占租约后重新枚举，避免漏掉新发布的后继代。
+      const entries = await readdir(dir, { withFileTypes: true })
+      signal?.throwIfAborted()
+      const opposite = entries.find(entry => parseGenerationLogFilename(entry.name, this.oppositeCompression()) !== undefined)
+      if (opposite !== undefined) throw this.encodingMismatch(join(dir, opposite.name))
+      const generationLogs = entries
+        .map(entry => entry.name)
+        .filter(name => parseGenerationLogFilename(name, this.compression) !== undefined)
+        .map(name => join(dir, name))
+      if (generationLogs.length === 0) return false
+      this.coldLogMemo.delete(id)
+      await Promise.all(generationLogs.map(path => rm(path)))
+      try {
+        await rmdir(dir)
+      } catch (error: unknown) {
+        // The stable POSIX lock inode and other session-owned artifacts remain.
+        if (!isENOENT(error) && !isNotEmptyError(error)) throw error
+      }
+      return true
+    } finally {
+      try {
+        await lease?.release()
+      } finally {
+        this.tracker.releaseClaim(id)
+      }
     }
   }
 
