@@ -1,0 +1,52 @@
+# NieRMHY fork 的 DSH settings 示例（脱敏版）
+# 把 GATEWAY_DISPLAY_NAME / GATEWAY_BASE_URL / GATEWAY_API_KEY_ENV 替换成你的中转站配置。
+# 特色：自定义 OpenAI 兼容中转也能选 DeepSeek 思考强度（low/high/max），
+#       并通过 supportsDeveloperRole: false 避免 developer role 被 400 拒绝。
+
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+
+llm-pi-ai:
+  providers:
+    gateway:
+      displayName: GATEWAY_DISPLAY_NAME
+      apiKeyEnv: GATEWAY_API_KEY_ENV
+      api: openai-completions
+      baseURL: GATEWAY_BASE_URL
+      compat:
+        thinkingFormat: deepseek
+        supportsReasoningEffort: true
+        # Add by MHY: DeepSeek 官方 OpenAI 接口只接受 system/user/assistant/tool，
+        # 不支持 developer role；自定义中转必须显式关闭，否则开思考会 400。
+        supportsDeveloperRole: false
+      models:
+        - id: glm-5.3
+          contextWindow: 1000000
+          maxTokens: 128000
+        - id: deepseek-v4-pro
+          contextWindow: 1000000
+          maxTokens: 128000
+          reasoningEfforts:
+            low: low
+            high: high
+            max: max
+        - id: glm-5.2
+          contextWindow: 1000000
+          maxTokens: 128000
+        - id: deepseek-v4-flash
+          contextWindow: 1000000
+          maxTokens: 128000
+          reasoningEfforts:
+            low: low
+            high: high
+            max: max
+
+agent-presets:
+  default: niermhy-standard
+
+agent-default-model:
+  provider: gateway
+  model: deepseek-v4-pro
+
+agent-loop:
+  maxParallelToolCalls: 128
