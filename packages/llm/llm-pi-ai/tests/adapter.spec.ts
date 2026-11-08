@@ -9,7 +9,7 @@ import type {
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import LlmRuntime, { createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createAssistantMessage, createToolResultMessage, createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, ReasoningEffortId, userAgent } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -1056,6 +1056,32 @@ describe('provider profile lifecycle', () => {
       for await (const _chunk of adapter.stream({ provider: 'anthropic', model: 'claude-sonnet-4', messages: [] })) { /* drain */ }
     })()).rejects.toMatchObject({ code: 'NO_ADAPTER' })
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
+  })
+
+  // Modify by MHY: the runtime owns text-model image projection for every adapter.
+  it.each(['user', 'tool'] as const)('projects %s images through the runtime before pi-ai dispatch', async (role) => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url)
+    const message = role === 'user'
+      ? createUserMessage({ content: [{ type: 'image', attachment: IMAGE_REF }], source: { kind: 'user' } })
+      : createToolResultMessage({ callId: 'call-image' as never, content: [{ type: 'image', attachment: IMAGE_REF }], isError: false })
+
+    const messages = role === 'user' ? [message] : [
+      createAssistantMessage({
+        source: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+        content: [{ type: 'tool-call', id: 'call-image' as never, name: 'ReadImage', arguments: '{}' }],
+      }),
+      message,
+    ]
+    const result = await assemble(ctx, { model: 'deepseek-v4-pro', messages })
+
+    expect(result.finish).toEqual({ kind: 'stop' })
+    expect(server.requests).toHaveLength(1)
+    expect(server.requests[0]).toMatchObject({ messages: expect.arrayContaining([expect.objectContaining({
+      role: role === 'user' ? 'user' : 'tool',
+      content: '[image omitted because this model accepts text only; attachment sha256:aaaaaaaa]',
+    })]) })
+    expect(message.content).toEqual([{ type: 'image', attachment: IMAGE_REF }])
   })
 
   it('rejects unsupported or unresolved image input before provider I/O', async () => {
