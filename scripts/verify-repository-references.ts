@@ -51,7 +51,9 @@ export function findRepositoryReferences(
     if (organizationUrl.test(canonicalReferenceText(line).replace(kitRepositoryUrl, ''))) {
       references.push({ file, line: index + 1, kind: 'organization-url' })
     }
-    if ([...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
+    // Modify by MHY, uv wheel byte sizes are decimal metadata, not Git identifiers.
+    const commitSource = file === 'python/sdk/uv.lock' ? line.replace(/\bsize = \d+(?=,| })/g, '') : line
+    if ([...commitSource.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
       references.push({ file, line: index + 1, kind: 'commit-hash' })
     }
   }

@@ -917,6 +917,9 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   WorkspaceCreateRequest: 'workspace.md',
   WorkspaceCreateValue: 'workspace.md',
   WorkspaceDeleteRequest: 'workspace.md',
+  // Add by MHY, permanent Session deletion uses the existing Workspace reference page.
+  WorkspaceDeleteSessionRequest: 'workspace.md',
+  WorkspaceDeleteSessionValue: 'workspace.md',
   WorkspaceDeleteValue: 'workspace.md',
   WorkspaceFollowFrame: 'workspace.md',
   WorkspaceId: 'workspace.md',

@@ -329,6 +329,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'an idempotent closure that removes this exact entry and emits `agent/disposed` with listener failures contained. When called from a `agent/created` listener, removal and disposal wait until the serial creation dispatch settles.',
       },
       {
+        signature: 'remove(sessionId: SessionId): boolean',
+        description: 'Remove one live agent from the registry by id, following the same announcement-deferral rule as enter. Session deletion is the only caller; it owns stopping and flushing the agent\'s session first.',
+        parameters: [{ name: 'sessionId', description: 'the agent id (shared with its session) to remove.' }],
+        returns: '`true` when a live entry existed, `false` when the id was absent.',
+      },
+      {
         signature: 'async announce(agent: Agent, source: SessionStartSource, signal?: AbortSignal): Promise<void>',
         description: 'Announce an agent previously inserted with enter.',
         parameters: [{ name: 'agent', description: 'the live inserted agent to announce.' }, { name: 'source', description: 'fresh creation, resume, clear, or compaction source.' }, { name: 'signal', description: 'optional factory initialization cancellation signal passed to listeners.' }],
@@ -2885,6 +2891,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{SessionAlreadyExistsError} when the id already exists.'],
       },
       {
+        signature: 'delete(_id: SessionId, signal?: AbortSignal): Promise<boolean>',
+        description: 'Durably delete one persisted session and every backend-owned artifact it materialized. Backends without a deletion primitive keep the default rejection so callers can distinguish unsupported storage from an absent session.',
+        parameters: [{ name: '_id', description: 'the persisted session to delete (unused by the default).' }, { name: 'signal', description: 'optional cancellation for backend delete work.' }],
+        returns: '`true` when a materialized session existed and was deleted, `false` when no such session was materialized.',
+        throws: ['when this backend does not support session deletion.'],
+      },
+      {
         signature: 'abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>',
         description: 'Open an existing stored session.\n\n`read` never takes ownership and works while another handle (or process) holds write ownership. `write` atomically claims single-writer ownership; an existing active owner rejects.',
         parameters: [{ name: 'id', description: 'the stored session to open.' }, { name: 'access', description: '`read` or `write`.' }, { name: 'options', description: 'optional cancellation.' }],
@@ -2946,6 +2959,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Cold-read one session\'s projections from its complete log. Each unit is seeded from the identity-checked cached rows — the registry skips `apply` for the already-folded prefix (events at or below the row\'s `seq`) — and the refreshed checkpoint is written back (fail-soft, fire-and-forget), so the first cold read creates the cache row and later ones seed from it. The caller supplies the complete log in seq order: this service never consults the persistence layer.',
         parameters: [{ name: 'meta', description: 'the stored session header (identity witness).' }, { name: 'inheritedEventCount', description: 'exact inherited prefix length for projection initialization and identity.' }, { name: 'events', description: 'the session\'s complete log, in seq order.' }],
         returns: 'the projection cut at the log end.',
+      },
+      {
+        signature: 'async forget(id: SessionId): Promise<void>',
+        description: 'Drop one session\'s persisted checkpoint. Deletion is the only caller; identity validation does not apply because there is no surviving log to match against.',
+        parameters: [{ name: 'id', description: 'the deleted session whose checkpoint is obsolete.' }],
+        returns: 'resolution after durability.',
       },
     ],
   },
@@ -3180,6 +3199,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'session', description: 'an unentered session; independent instances become store-owned.' }],
         returns: 'the detach disposer (publication hooks + store removal). When called from a synchronous `session/created` listener, removal and disposal wait until that creation dispatch unwinds.',
         throws: ['if a session with this id is already in the store.'],
+      },
+      {
+        signature: 'remove(sessionId: SessionId): boolean',
+        description: 'Remove one live session from the store by id, following the same publication-deferral rule as the enter() detach capability. The caller owns flushing and stopping the session\'s agent first.',
+        parameters: [{ name: 'sessionId', description: 'the live session to remove.' }],
+        returns: '`true` when a live entry existed, `false` when the id was absent.',
       },
       {
         signature: 'announce(session: Session): void',
@@ -4550,6 +4575,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting pin set, most recently pinned first.',
       },
       {
+        signature: '@Remote(\'deleteSession\') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue>',
+        description: 'Permanently delete one Session (log, projection, accounting, archive entry).',
+        parameters: [{ name: 'request', description: 'Session identity to delete.' }],
+        returns: 'deletion receipt plus the complete updated archive set.',
+      },
+      {
         signature: '@Remote({ mode: \'stream\' }) async *follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>',
         description: 'Stream a complete Workspace baseline followed by ordered increments. A non-owner receives only the Workspaces and Sessions `allows()` admits. When a delivered Workspace is no longer admitted at its next change or the next order change, the stream sends a `replace` frame with the complete filtered state instead of a `remove`, because a Client never resurrects a removed Workspace; a `remove` frame reports a deletion and reaches only a Client that received that Workspace.',
         parameters: [{ name: 'signal', description: 'generation cancellation.' }],
@@ -4658,6 +4689,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'unpinSession(sessionId: SessionId): Promise<void>',
         description: 'Unpin one session durably by dropping it from the registry-global pin set. Unpinning runs no session-existence check because removing an id cannot introduce an unknown one, so an entry whose session is gone still resolves. An id that is not pinned resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to unpin.' }],
+        returns: 'resolution after durability.',
+      },
+      {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Remove one session from every durable registry slot: each workspace account, the archive and pin sets, and the in-memory header index. The session log itself belongs to `sessionPersistence.delete`, so the caller owns that step; this method only stops the registry from naming the session again.',
+        parameters: [{ name: 'sessionId', description: 'the deleted session to forget.' }],
         returns: 'resolution after durability.',
       },
       {
@@ -5386,6 +5423,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Ask the composed providers what still runs for a session before it is archived.',
     description: 'Ask the composed providers what still runs for a session before it is archived. A listener prepends its own SessionActivity entries to the result of `next()`; the registry\'s innermost callback returns an empty list, so a composition without providers archives freely. Any non-empty result refuses the archive without a write.',
     parameters: [{ name: 'request', description: 'the session about to be archived.' }, { name: 'next', description: 'delegate to the remaining providers.' }],
+  },
+  {
+    name: 'workspace/session-forgotten',
+    mode: 'emit',
+    signature: '\'workspace/session-forgotten\'(sessionId: SessionId): void',
+    summary: 'The registry dropped every durable slot for one Session, typically because the Session was deleted.',
+    description: 'The registry dropped every durable slot for one Session, typically because the Session was deleted. Session list consumers that mirror the registry need this to drop a row that never had a live Session behind it (an archived or long-closed entry), which `session/disposed` never reports.',
+    parameters: [{ name: 'sessionId', description: 'the forgotten Session identity.' }],
   },
   {
     name: 'workspace/session-stop',
@@ -10126,6 +10171,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceDeleteRequest',
     declaration: 'export interface WorkspaceDeleteRequest {\n    readonly workspaceId: WorkspaceId;\n}',
+  },
+  {
+    name: 'WorkspaceDeleteSessionRequest',
+    declaration: 'export interface WorkspaceDeleteSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'WorkspaceDeleteSessionValue',
+    declaration: 'export interface WorkspaceDeleteSessionValue {\n    readonly deleted: true;\n    readonly archivedSessionIds: readonly SessionId[];\n}',
   },
   {
     name: 'WorkspaceDeleteValue',
