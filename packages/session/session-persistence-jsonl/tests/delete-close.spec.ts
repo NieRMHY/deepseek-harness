@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceCommands } from '../../../api/workspace-controller/src/commands.ts'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { generationLogPath } from '../src/format.ts'
 import { SessionWriteLease } from '../src/lease.ts'
@@ -33,6 +34,9 @@ describe.each(['none', 'zstd'] as const)('Session deletion joins natural close (
     const ctx = new Context()
     contexts.push(ctx)
     await ctx.plugin(SessionStore)
+    // AgentRegistry injects the mandatory projection seam, so its `agents` service only
+    // activates beside `sessionProjections`; deletion reads live Agents through it.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(Storage)
     const backend = new MemoryStorageBackend()
@@ -67,6 +71,7 @@ describe.each(['none', 'zstd'] as const)('Session deletion joins natural close (
     const releaseEntered = Promise.withResolvers<undefined>()
     const releaseGate = Promise.withResolvers<undefined>()
     const deleteEntered = Promise.withResolvers<undefined>()
+    // oxlint-disable-next-line typescript/unbound-method -- spy replaces it; `release.call(this)` binds `this`
     const release = SessionWriteLease.prototype.release
     const failure = new Error('owner close failed after releasing its lease')
     vi.spyOn(SessionWriteLease.prototype, 'release').mockImplementationOnce(async function (this: SessionWriteLease) {
@@ -75,6 +80,7 @@ describe.each(['none', 'zstd'] as const)('Session deletion joins natural close (
       await release.call(this)
       if (closeOutcome === 'failure') throw failure
     })
+    // oxlint-disable-next-line typescript/unbound-method -- spy replaces it; `claimDelete.call(this, id)` binds `this`
     const claimDelete = JsonlBackendTracker.prototype.claimDelete
     vi.spyOn(JsonlBackendTracker.prototype, 'claimDelete').mockImplementationOnce(function (this: JsonlBackendTracker, id) {
       const claiming = claimDelete.call(this, id)

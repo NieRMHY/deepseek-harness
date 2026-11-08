@@ -8,9 +8,15 @@ import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import LocalJobRegistry from '../../../jobs/jobs-local/src/index.ts'
 import type { JobOutcome } from '../../../jobs/jobs/src/index.ts'
 import { installSubagentArchiveAdmission } from '../../../subagent/subagent/src/archive-admission.ts'
+import type { ScheduleCatalogEntry, ScheduleId } from '../../../schedule/schedule/src/types.ts'
 import { agentFor, gatedScheduleBackend, harness as scheduleHarness } from '../../../schedule/schedule/tests/harness.ts'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { WorkspaceCommands } from '../src/commands.ts'
+
+/** Stored task ids that target one Session; a `new` target owns no existing Session. */
+const remindersFor = (entries: readonly ScheduleCatalogEntry[], sessionId: SessionId): ScheduleId[] =>
+  entries.filter(entry => entry.target.kind !== 'new' && entry.target.sessionId === sessionId)
+    .map(entry => entry.id)
 
 const roots: Context[] = []
 afterEach(async () => {
@@ -53,9 +59,20 @@ describe('permanent Session deletion stops activity', () => {
       kind: 'bash', label: 'delete-owned-job', owner: parent.id,
       run: () => ({ cancel: cancelJob, done: done.promise }),
     })
-    await service.create(parent.id, { title: 'Delete reminder', prompt: 'Later', after_seconds: 3_600 })
+    // Add by MHY, schedule tasks are host-wide and bind their destination through `target`.
+    await service.create({
+      title: 'Delete reminder',
+      prompt: 'Later',
+      timing: { kind: 'after', after_seconds: 3_600 },
+      target: { kind: 'session', sessionId: parent.id },
+    }, parent.id)
     const foreignId = SessionId('keep-reminder')
-    const foreign = await service.create(foreignId, { title: 'Keep reminder', prompt: 'Later', after_seconds: 3_600 })
+    const foreign = await service.create({
+      title: 'Keep reminder',
+      prompt: 'Later',
+      timing: { kind: 'after', after_seconds: 3_600 },
+      target: { kind: 'session', sessionId: foreignId },
+    }, foreignId)
     const stopping = Promise.withResolvers<undefined>()
     const release = Promise.withResolvers<undefined>()
     // Add by MHY, 2026-10-21：子会话现在也走同一条停止路径，这里只拦父会话的停止点。
@@ -70,7 +87,7 @@ describe('permanent Session deletion stops activity', () => {
     ctx.on('session/disposed', (session) => { if (session.id === parent.id) order.push('session-removed') })
     removeStored.mockImplementation(async (sessionId) => {
       if (sessionId === parent.id) {
-        expect(await service.list({ sessionId: parent.id })).toEqual([])
+        expect(remindersFor((await service.list()).items, parent.id)).toEqual([])
         expect(cancelJob).toHaveBeenCalledTimes(1)
         expect(childCancel).toHaveBeenCalledWith({ kind: 'parent' })
         expect(ctx.agents.get(parent.id)).toBeUndefined()
@@ -102,7 +119,7 @@ describe('permanent Session deletion stops activity', () => {
     expect(cancelParent).toHaveBeenCalledWith({ kind: 'disposed' })
     expect(ctx.sessions.get(child.id)).toBeUndefined()
     expect((await ctx.jobs.wait(jobId, 1_000, parent.id)).status).toBe('killed')
-    expect((await service.list({ sessionId: foreignId })).map(row => row.id)).toEqual([foreign.id])
+    expect(remindersFor((await service.list()).items, foreignId)).toEqual([foreign.id])
   })
 
   it('deletes stored subagent descendants with their parent and keeps forks', async () => {
@@ -174,13 +191,31 @@ describe('permanent Session deletion stops activity', () => {
   })
 
   it('stops persistent reminders for an archived Session with no live Agent or Session', async () => {
-    const { ctx, service, commands, removeStored } = await setup()
+    const pool = new MemoryMediaPool()
+    let reminderDeletesFail = true
+    // `stopSessionTasks` removes its rows as one `deleteRecords` batch.
+    const backend = gatedScheduleBackend(pool, {
+      deleteRecords: async () => { if (reminderDeletesFail) throw new Error('archive stop failed') },
+    })
+    const { ctx, service, commands, removeStored } = await setup({ pool, backend })
     const session = ctx.sessions.create(SessionId('delete-cold'))
-    await ctx.workspaceRegistry.archiveSession(session.id)
+    const reminder = await service.create({
+      title: 'Cold reminder',
+      prompt: 'Later',
+      timing: { kind: 'after', after_seconds: 3_600 },
+      target: { kind: 'session', sessionId: session.id },
+    }, session.id)
+    // Archiving commits the archive set before its stop providers run and logs a rejected
+    // stop instead of rolling back, so this rejected stop leaves exactly the stored state a
+    // cold Session reaches: archived, no live Agent or Session, reminder still stored.
+    await expect(ctx.workspaceRegistry.archiveSession(session.id, { stopActivity: true })).resolves.toBeUndefined()
+    expect(ctx.workspaceRegistry.archivedSessionIds).toContain(session.id)
+    expect(remindersFor((await service.list()).items, session.id)).toEqual([reminder.id])
     ctx.sessions.remove(session.id)
-    await service.create(session.id, { title: 'Cold reminder', prompt: 'Later', after_seconds: 3_600 })
+    expect(ctx.sessions.get(session.id)).toBeUndefined()
+    reminderDeletesFail = false
     removeStored.mockImplementation(async () => {
-      expect(await service.list({ sessionId: session.id })).toEqual([])
+      expect(remindersFor((await service.list()).items, session.id)).toEqual([])
       return true
     })
     await expect(commands.deleteSession({ sessionId: session.id })).resolves.toEqual({ deleted: true, archivedSessionIds: [] })
@@ -190,18 +225,23 @@ describe('permanent Session deletion stops activity', () => {
   it('preserves the transcript and registry when a real reminder stop fails', async () => {
     const pool = new MemoryMediaPool()
     const backend = gatedScheduleBackend(pool, {
-      deleteRecord: async () => { throw new Error('schedule delete failed') },
+      deleteRecords: async () => { throw new Error('schedule delete failed') },
     })
     const { ctx, service, commands, removeStored, forget } = await setup({ pool, backend })
     const session = ctx.sessions.create(SessionId('stop-failure'))
     await ctx.workspaceRegistry.pinSession(session.id)
-    await service.create(session.id, { title: 'Keep on failure', prompt: 'Later', after_seconds: 3_600 })
+    const reminder = await service.create({
+      title: 'Keep on failure',
+      prompt: 'Later',
+      timing: { kind: 'after', after_seconds: 3_600 },
+      target: { kind: 'session', sessionId: session.id },
+    }, session.id)
     await expect(commands.deleteSession({ sessionId: session.id })).rejects.toThrow()
     expect(removeStored).not.toHaveBeenCalled()
     expect(forget).not.toHaveBeenCalled()
     expect(ctx.sessions.get(session.id)).toBe(session)
     expect(ctx.workspaceRegistry.pinnedSessionIds).toContain(session.id)
-    expect(await service.list({ sessionId: session.id })).toHaveLength(1)
+    expect(remindersFor((await service.list()).items, session.id)).toEqual([reminder.id])
   })
 
   it('preserves the transcript and live registries when the final flush fails', async () => {

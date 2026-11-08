@@ -2,9 +2,12 @@
   - menuitem "Pin session"
   - menuitem "Rename"
   - menuitem "Fork session"
-  - menuitem "Archive session"
+  - separator
   - menuitem "Copy Session ID"
   - separator
   - menuitem "Export session"
   - menuitem "Delete session"
   - menuitem "Copy session ID"
+  - menuitem "Delete session"
+  - separator
+  - menuitem "Archive session"
